@@ -1,0 +1,20 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "outputs": ["dist/**"]
+    },
+    "test": {
+      "env": ["NODE_ENV"],
+      "passThroughEnv": ["DATABASE_URL"]
+    },
+    "test:int": {
+      "env": ["NODE_ENV"],
+      "passThroughEnv": ["DATABASE_URL"]
+    },
+    "test:e2e": {
+      "env": ["NODE_ENV"],
+      "passThroughEnv": ["DATABASE_URL"]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+# App-scoped compose for the API's local dependency only — Postgres.
+# Run the API itself on the host with `pnpm --filter api dev` (Nest watch mode),
+# pointed at this container via DATABASE_URL (see apps/api/.env.example).
+# For the full containerized stack (postgres + api + web), use the root docker-compose.yml.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: api
+    ports:
+      - "5432:5432"
+    volumes:
+      - api-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Dedicated test Postgres for the integration/e2e Vitest tiers (see
+  # apps/api/.agents/rules/testing-strategy.md). Separate port + volume so it never
+  # collides with the dev `postgres` service above.
+  postgres-test:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: api_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - api-postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  api-postgres-data:
+  api-postgres-test-data:

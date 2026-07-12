@@ -1,0 +1,17 @@
+# App-scoped compose for the frontend only. Build context is the monorepo root (../..).
+# This runs just `web`; it expects an API reachable at NEXT_PUBLIC_API_URL.
+# For the full stack (postgres + api + web), use the root docker-compose.yml.
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${WEB_PORT:-3000}:3000"

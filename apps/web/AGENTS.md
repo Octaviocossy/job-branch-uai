@@ -1,8 +1,8 @@
 # AGENTS.md — apps/web
 
-Next.js 16 (App Router, React 19), dev on `:3000`. TanStack Query + axios data layer
-against the NestJS API (`apps/api`); React Hook Form + zod for forms. Consumes
-`@repo/models`.
+JobBranch — a job application pipeline manager, built with Next.js 16 (App Router,
+React 19), dev on `:3000`. TanStack Query + axios data layer against the NestJS API
+(`apps/api`); React Hook Form + zod for forms. Consumes `@repo/models`.
 
 ## Structure
 

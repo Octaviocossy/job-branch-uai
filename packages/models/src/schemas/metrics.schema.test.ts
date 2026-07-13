@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conversionSchema, profileRoiSchema, skillGapSchema, techHeatmapSchema, userStatsSchema } from "./metrics.schema.js";
+import { analyticsOverviewSchema, conversionSchema, profileRoiSchema, skillGapSchema, sourceDistributionSchema, techHeatmapSchema, userStatsSchema } from "./metrics.schema.js";
 
 describe("profileRoiSchema", () => {
   const valid = { cvVersionId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301", applications: 12, interviews: 3, roi: 0.25 };
@@ -66,5 +66,45 @@ describe("userStatsSchema", () => {
 
   it("rejects a negative roiGlobal", () => {
     expect(userStatsSchema.safeParse({ ...valid, roiGlobal: -0.1 }).success).toBe(false);
+  });
+});
+
+describe("sourceDistributionSchema", () => {
+  const valid = { source: "LinkedIn", count: 7 };
+
+  it("parses a valid source distribution entry", () => {
+    expect(sourceDistributionSchema.parse(valid)).toEqual(valid);
+  });
+
+  it("rejects an empty source", () => {
+    expect(sourceDistributionSchema.safeParse({ ...valid, source: "" }).success).toBe(false);
+  });
+
+  it("rejects a negative count", () => {
+    expect(sourceDistributionSchema.safeParse({ ...valid, count: -1 }).success).toBe(false);
+  });
+});
+
+describe("analyticsOverviewSchema", () => {
+  const valid = {
+    conversion: [{ stage: "Enviado", count: 10, conversionRate: 1 }],
+    roi: [{ cvVersionId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301", applications: 10, interviews: 3, roi: 0.3 }],
+    heatmap: [{ technology: "Java", applications: 8, rejections: 5, advances: 3 }],
+    gaps: [{ skill: "Java", missingCount: 4 }],
+    sources: [{ source: "LinkedIn", count: 7 }],
+    stats: { roiGlobal: 0.35, gapHabilidades: ["Java"] },
+  };
+
+  it("parses a valid analytics overview", () => {
+    expect(analyticsOverviewSchema.parse(valid)).toEqual(valid);
+  });
+
+  it("rejects an overview with an invalid nested conversion stage", () => {
+    expect(
+      analyticsOverviewSchema.safeParse({
+        ...valid,
+        conversion: [{ stage: "Desconocido", count: 10, conversionRate: 1 }],
+      }).success,
+    ).toBe(false);
   });
 });

@@ -36,11 +36,11 @@ Both required at least once; implemented + unit-tested in **#10 (Security)**:
 |------|-------|--------|-------|--------|
 | 1 | #2 | `2-foundation-models-and-persistence` | Foundation — `@repo/models` schemas + API persistence (Drizzle + seed + module stubs) + glossary reset | done |
 | 1 | #3 | `3-foundation-web-shell` | Foundation — web design system, app shell & data-layer conventions | done |
-| 2 | #4 | `4-auth-identity` | Auth & identity (full-stack) — register/login, BCrypt, JWT, role | pending |
-| 2 | #5 | `5-branches-backend` | Branch management backend — rama/vacante/empresa/hito/feedback module | pending |
-| 2 | #6 | `6-cv-profiles` | CV profiles (full-stack) — VersionPerfil module (blob) + profiles screen | pending |
-| 2 | #7 | `7-analytics` | Analytics (full-stack) — metrics endpoints + analytics screen | pending |
-| 2 | #8 | `8-followup` | Follow-up / anti-ghosting (full-stack) — reminders module + follow-up screen | pending |
+| 2 | #4 | `4-auth-identity` | Auth & identity (full-stack) — register/login, BCrypt, JWT, role | done |
+| 2 | #5 | `5-branches-backend` | Branch management backend — rama/vacante/empresa/hito/feedback module | done |
+| 2 | #6 | `6-cv-profiles` | CV profiles (full-stack) — VersionPerfil module (blob) + profiles screen | done |
+| 2 | #7 | `7-analytics` | Analytics (full-stack) — metrics endpoints + analytics screen | done |
+| 2 | #8 | `8-followup` | Follow-up / anti-ghosting (full-stack) — reminders module + follow-up screen | done |
 | 3 | #9 | `9-branches-dashboard-frontend` | Branches & dashboard frontend — /branches, /branches/[id], / wired to the API | pending |
 | 3 | #10 | `10-security-permission-matrix` | Security — permission matrix (Composite + Factory, mandatory patterns) [RF15] | pending |
 

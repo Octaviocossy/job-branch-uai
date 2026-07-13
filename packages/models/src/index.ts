@@ -6,6 +6,7 @@ export * from "./schemas/feedback.schema.js";
 export * from "./schemas/followup.schema.js";
 export * from "./schemas/hito.schema.js";
 export * from "./schemas/metrics.schema.js";
+export * from "./schemas/permiso.schema.js";
 export * from "./schemas/recordatorio.schema.js";
 export * from "./schemas/user.schema.js";
 export * from "./schemas/vacante.schema.js";

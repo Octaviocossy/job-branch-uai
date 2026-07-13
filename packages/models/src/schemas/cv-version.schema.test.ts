@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCvVersionSchema, cvVersionEstadoSchema, cvVersionSchema } from "./cv-version.schema.js";
+import { createCvVersionRequestSchema, createCvVersionSchema, cvVersionEstadoSchema, cvVersionSchema } from "./cv-version.schema.js";
 
 const validCvVersion = {
   id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
@@ -69,5 +69,28 @@ describe("createCvVersionSchema", () => {
       expect(result.data).not.toHaveProperty("createdAt");
       expect(result.data).not.toHaveProperty("rendimiento");
     }
+  });
+});
+
+describe("createCvVersionRequestSchema", () => {
+  it("accepts just name and focus, with tags optional", () => {
+    const result = createCvVersionRequestSchema.safeParse({ name: "v4.0 — Backend Focus", focus: "Backend" });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an explicit tags override", () => {
+    const result = createCvVersionRequestSchema.safeParse({ name: "v4.0", focus: "Backend", tags: ["backend", "node"] });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tags).toEqual(["backend", "node"]);
+    }
+  });
+
+  it("rejects an empty name", () => {
+    const result = createCvVersionRequestSchema.safeParse({ name: "", focus: "Backend" });
+
+    expect(result.success).toBe(false);
   });
 });

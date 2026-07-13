@@ -21,7 +21,14 @@ export const cvVersionSchema = z.object({
 
 export const createCvVersionSchema = cvVersionSchema.omit({ id: true, createdAt: true, rendimiento: true });
 
+export const createCvVersionRequestSchema = z.object({
+  name: z.string().min(1),
+  focus: z.string().min(1),
+  tags: z.array(z.string()).optional(),
+});
+
 export type CvVersionEstado = z.infer<typeof cvVersionEstadoSchema>;
 export type CvVersionRendimiento = z.infer<typeof cvVersionRendimientoSchema>;
 export type CvVersion = z.infer<typeof cvVersionSchema>;
 export type CreateCvVersionInput = z.infer<typeof createCvVersionSchema>;
+export type CreateCvVersionRequest = z.infer<typeof createCvVersionRequestSchema>;

@@ -3,14 +3,15 @@
 > Single source of truth for domain terminology. Update when entities, relationships,
 > or naming conventions change. AI tools should read this before inspecting source files.
 >
-> **Last updated**: 2026-07-13 (security permission matrix)
+> **Last updated**: 2026-07-13 (removed SPEC.md + v0 prototype references)
 > **Canonical types**: `packages/models/src/schemas/`
 > **Persistence layer**: `apps/api/src/database/schema/` (Drizzle table definitions mirroring `@repo/models` shapes)
 >
-> Domain source: `SPEC.md` §6 (Domain Model) and §7 (State Machines). Spanish terms below are the
-> SPEC's own vocabulary (`Usuario`, `RamaAplicacion`, `VersionPerfil`, …); the canonical Zod/Drizzle
-> identifiers are English (`user`, `application`, `cvVersion`, …) except where a field name is kept
-> in Spanish to match the SPEC literally (e.g. `esPerfilSalida`, `fechaVencimiento`).
+> Domain source: the academic deliverable (Parcial N2, Ingeniería de Software, UAI) — its domain
+> model (§6) and state machines (§7). Spanish terms below are that deliverable's own vocabulary
+> (`Usuario`, `RamaAplicacion`, `VersionPerfil`, …); the canonical Zod/Drizzle identifiers are
+> English (`user`, `application`, `cvVersion`, …) except where a field name is kept in Spanish to
+> match the source literally (e.g. `esPerfilSalida`, `fechaVencimiento`).
 
 ---
 
@@ -49,10 +50,10 @@
 
 `apps/web` has no separate frontend-only type layer for these entities: it imports the same
 `@repo/models` Zod-inferred types (`Application`, `CvVersion`, `Hito`, …) as its view-models,
-re-exported through `apps/web/models/index.ts` (`export * from "@repo/models"`). The ported
-prototype types in `apps/v0-prototype/lib/data.ts` (`ApplicationStatus`, `TimelineEvent`,
-`Recruiter`, `Application`, `CvVersion`, `PIPELINE_STAGES`) map 1:1 onto `application.schema.ts`
-/ `hito.schema.ts` — wave-3 frontend slices (#9) consume the shared schema instead of
+re-exported through `apps/web/models/index.ts` (`export * from "@repo/models"`). The frontend
+view-model shapes (`ApplicationStatus`, `TimelineEvent`, `Recruiter`, `Application`,
+`CvVersion`, `PIPELINE_STAGES`) live solely in `@repo/models` (`application.schema.ts` /
+`hito.schema.ts`); the wave-3 frontend slices (#9) consume the shared schema rather than
 re-declaring these shapes.
 
 ---
@@ -70,7 +71,7 @@ re-declaring these shapes.
 
 ---
 
-## State machines (SPEC §7)
+## State machines
 
 ### CvVersion.`estado` lifecycle
 
@@ -95,7 +96,7 @@ Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 - Each transition is recorded as a `Hito` in the `Application`'s `timeline`.
 - `Oferta` and `Rechazado` are terminal states that allow archiving (`Archivado`, RF09).
 - Enum: `applicationStatusSchema` = `["Enviado", "Entrevista Técnica", "RRHH", "Oferta", "Rechazado", "Archivado"]`, defined in `hito.schema.ts`.
-- `PIPELINE_STAGES` (kanban column order, excludes the terminal `Archivado` stage) = `["Enviado", "RRHH", "Entrevista Técnica", "Oferta", "Rechazado"]` — ported verbatim from `apps/v0-prototype/lib/data.ts`; see Flagged ambiguities below.
+- `PIPELINE_STAGES` (kanban column order, excludes the terminal `Archivado` stage) = `["Enviado", "RRHH", "Entrevista Técnica", "Oferta", "Rechazado"]`, defined in `hito.schema.ts`; see Flagged ambiguities below.
 - `AddHitoUseCase` (`apps/api/src/modules/branches/application/use-cases/add-hito.use-case.ts`) enforces two guards — a branch already in a `TERMINAL_STATUSES` status (`Oferta`/`Rechazado`/`Archivado`, `apps/api/src/modules/branches/domain/terminal-statuses.ts`) cannot receive another hito, and a hito cannot set `status` to `Archivado` directly (use `POST /branches/:id/archive` instead). Both raise `InvalidStatusTransitionError` (`apps/api/src/modules/branches/domain/errors/invalid-status-transition.error.ts`), mapped to `400` by `BranchesController`. This does **not** enforce stage *order* — see Flagged ambiguities below.
 
 ---
@@ -112,14 +113,13 @@ Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 
 ## Flagged ambiguities
 
-- **`PIPELINE_STAGES` order vs. SPEC §7.2 prose.** SPEC §7.2 describes the Application lifecycle
-  textually as `Enviado → Entrevista Técnica → RRHH → Oferta | Rechazo`, but the ported
-  prototype's kanban column order (`PIPELINE_STAGES` in `hito.schema.ts`, matching
-  `apps/v0-prototype/lib/data.ts`) is `Enviado → RRHH → Entrevista Técnica → Oferta → Rechazado`.
-  Real seeded applications also move through stages in either order in practice (see
-  `apps/api/src/database/seed.ts`). Treat `PIPELINE_STAGES` as a **display/board-column order**,
-  not a strict enforced transition sequence — no state-machine guard rejects an
-  `Enviado → Entrevista Técnica` jump today.
+- **`PIPELINE_STAGES` order vs. the documented lifecycle.** The domain lifecycle describes the
+  Application flow textually as `Enviado → Entrevista Técnica → RRHH → Oferta | Rechazo`, but the
+  kanban column order (`PIPELINE_STAGES` in `hito.schema.ts`) is
+  `Enviado → RRHH → Entrevista Técnica → Oferta → Rechazado`. Real seeded applications also move
+  through stages in either order in practice (see `apps/api/src/database/seed.ts`). Treat
+  `PIPELINE_STAGES` as a **display/board-column order**, not a strict enforced transition
+  sequence — no state-machine guard rejects an `Enviado → Entrevista Técnica` jump today.
 
 ---
 
@@ -140,3 +140,4 @@ Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 | 2026-07-13 | Extended **Metrics** with `SourceDistribution` and `AnalyticsOverview` (`sourceDistributionSchema`, `analyticsOverviewSchema`); implemented the `apps/api` `analytics` module (own `AnalyticsReadRepository` over `applications`/`hitos`/`cv_versions`) and the `apps/web` "Analítica" screen | Epic #1 / issue #7 — analytics (full-stack) |
 | 2026-07-13 | Added **FollowupItem** read-model (`@repo/models` `followup.schema.ts`) and the `apps/api` `followup` module (`list-followups`, `generate-reminders`, `mark-followup-done` use-cases over its own `applications`/`vacantes`/`empresas`/`recordatorios` read repository) | Epic #1 / issue #8 — follow-up / anti-ghosting full-stack slice |
 | 2026-07-13 | Added the RF15/CU15 permission matrix: **ComponentePermiso**/**GrupoPermisos**/**Accion** Composite tree + **ContextoSeguridad**, built per role by the **MatrizPermisosFactory** Factory (`PostulanteMatrizFactory`/`RecruiterMatrizFactory`); new `apps/api` `security` module (`ResolverPermisosUseCase`, `GET /security/matrix`), `@RequiereAccion`/`PermissionsGuard` enforcement wired onto `GET /security/matrix` and `GET /auth/me`; added `permissionMatrixSchema`/`PermissionMatrix` to `@repo/models` | Epic #1 / issue #10 — security permission matrix (Composite + Factory) [RF15], the canonical home for the two mandatory design patterns |
+| 2026-07-13 | Removed the file links to the now-deleted `SPEC.md` and `apps/v0-prototype/lib/data.ts`; glossary is now self-contained (domain attribution kept to the academic deliverable) | `apps/v0-prototype` app + `SPEC.md` removed from the repo |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCvVersionRequestSchema, createCvVersionSchema, cvVersionEstadoSchema, cvVersionSchema } from "./cv-version.schema.js";
+import { createCvVersionRequestSchema, createCvVersionSchema, cvVersionEstadoSchema, cvVersionSchema } from "./cv-version.schema";
 
 const validCvVersion = {
   id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",

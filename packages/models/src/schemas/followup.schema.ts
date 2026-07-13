@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { recruiterSchema } from "./application.schema.js";
-import { applicationStatusSchema } from "./hito.schema.js";
+import { recruiterSchema } from "./application.schema";
+import { applicationStatusSchema } from "./hito.schema";
 
 export const followupUrgencySchema = z.enum(["ok", "warn", "critical"]);
 

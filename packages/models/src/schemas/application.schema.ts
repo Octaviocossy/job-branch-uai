@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { applicationStatusSchema, hitoSchema } from "./hito.schema.js";
+import { applicationStatusSchema, hitoSchema } from "./hito.schema";
 
 export const recruiterSchema = z.object({
   name: z.string().min(1),

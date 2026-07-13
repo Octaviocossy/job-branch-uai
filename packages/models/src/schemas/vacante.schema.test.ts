@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createVacanteSchema, vacanteSchema } from "./vacante.schema.js";
+import { createVacanteSchema, vacanteSchema } from "./vacante.schema";
 
 const validVacante = {
   id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",

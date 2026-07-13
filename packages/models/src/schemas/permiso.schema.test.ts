@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { permissionMatrixSchema } from "./permiso.schema.js";
+import { permissionMatrixSchema } from "./permiso.schema";
 
 describe("permissionMatrixSchema", () => {
   const valid = { role: "postulante", acciones: ["branch.create", "cv.create"] };

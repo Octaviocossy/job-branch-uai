@@ -47,22 +47,24 @@ tests in the repo:
 - The config's `include` is `src/**/*.test.ts` — any test file must live under `src/` to
   be picked up.
 
-## 5. NodeNext ESM import quirk
+## 5. Extensionless relative imports (Bundler resolution)
 
-Relative imports in test files need an explicit `.js` extension, matching the convention
-already used in `src/index.ts` — e.g. `import { userSchema } from "./user.schema.js"`, not
-`"./user.schema"`. Omitting the extension compiles under Vitest's esbuild transform but
-fails `check-types` (TS2835) under this package's NodeNext `tsconfig`. Import Vitest
-primitives explicitly: `import { describe, expect, it } from "vitest"`.
+Relative imports in test files are **extensionless**, matching the convention used in
+`src/index.ts` — e.g. `import { userSchema } from "./user.schema"`, not
+`"./user.schema.js"`. This package overrides `module`/`moduleResolution` to `ESNext`/`Bundler`
+in its `tsconfig.json` (it is bundled by `tsup`, not emitted by `tsc`), so `check-types`
+accepts bare specifiers — a `.js` extension is **not** required and should not be added. Do
+not re-introduce the old NodeNext `.js`-suffix convention here. Import Vitest primitives
+explicitly: `import { describe, expect, it } from "vitest"`.
 
 ## 6. No build/type-check leak
 
 `tsup` only bundles `src/index.ts` (per `packages/models/package.json`'s `build` script),
 so `*.test.ts` files never reach `dist` — the package's published output is test-free with
 no extra config. `check-types` (`tsc --noEmit`) still type-checks test files, because they
-live under `src/` alongside the code they test — this is exactly why the `.js`-extension
-import rule in §5 matters: `check-types` will fail on a bare specifier even though `vitest
-run` would not.
+live under `src/` alongside the code they test — so the extensionless-import convention in
+§5 applies to them too: under this package's `Bundler` resolution, both `check-types` and
+`vitest run` resolve bare specifiers identically.
 
 ## 7. Headless / CI safety
 

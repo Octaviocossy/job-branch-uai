@@ -1,8 +1,10 @@
 # AGENTS.md — packages/models
 
 `@repo/models` — shared Zod-schema domain package consumed by `apps/api` and `apps/web`.
-Built by `tsup` into dual ESM (`dist/index.js`) + CJS (`dist/index.cjs`) output with
-generated `.d.ts` types.
+Built by `tsup` into dual ESM (`dist/index.mjs`) + CJS (`dist/index.js`) output with
+generated `.d.ts` types. The package is **not** `type: module` — its `tsconfig.json`
+overrides `module`/`moduleResolution` to `ESNext`/`Bundler`, so relative imports are
+extensionless (no NodeNext `.js` suffix).
 
 ## Commands
 

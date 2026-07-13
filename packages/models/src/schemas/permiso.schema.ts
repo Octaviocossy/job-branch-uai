@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { userRoleSchema } from "./user.schema.js";
+import { userRoleSchema } from "./user.schema";
 
 export const permissionMatrixSchema = z.object({
   role: userRoleSchema,

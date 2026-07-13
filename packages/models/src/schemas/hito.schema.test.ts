@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicationStatusSchema, createHitoSchema, hitoSchema, PIPELINE_STAGES } from "./hito.schema.js";
+import { applicationStatusSchema, createHitoSchema, hitoSchema, PIPELINE_STAGES } from "./hito.schema";
 
 const validHito = {
   id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",

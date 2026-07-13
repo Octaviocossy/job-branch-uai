@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authResponseSchema, loginSchema, registerSchema } from "./auth.schema.js";
+import { authResponseSchema, loginSchema, registerSchema } from "./auth.schema";
 
 const validRegister = {
   email: "ada@example.com",

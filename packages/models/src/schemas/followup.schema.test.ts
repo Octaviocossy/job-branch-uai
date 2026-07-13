@@ -6,7 +6,7 @@ import {
   followupThresholdsSchema,
   followupUrgencySchema,
   listFollowupsQuerySchema,
-} from "./followup.schema.js";
+} from "./followup.schema";
 
 const validItem = {
   ramaId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",

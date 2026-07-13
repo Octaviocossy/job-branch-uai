@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { applicationStatusSchema } from "./hito.schema.js";
+import { applicationStatusSchema } from "./hito.schema";
 
 export const profileRoiSchema = z.object({
   cvVersionId: z.uuid(),

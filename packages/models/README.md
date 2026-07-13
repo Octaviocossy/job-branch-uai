@@ -56,8 +56,8 @@ entry `src/index.ts`:
 
 | File | Format | Consumed by |
 |------|--------|-------------|
-| `dist/index.js` | ESM | `import` (`apps/web`, ESM tooling) |
-| `dist/index.cjs` | CJS | `require` (`apps/api`, NodeNext CommonJS) |
+| `dist/index.mjs` | ESM | `import` (`apps/web`, ESM tooling) |
+| `dist/index.js` | CJS | `require` (`apps/api`, NodeNext CommonJS) |
 | `dist/index.d.ts` | Types | Both, via `package.json` `exports` |
 
 The `exports` map in [`package.json`](package.json) routes `import`/`require`/`types` to
@@ -85,9 +85,11 @@ repo. Its config (`vitest.config.ts`) merges the [`@repo/vitest-config/node`](..
 preset. Tests cover: valid input parses, each field constraint rejects bad input on its
 own, and derived-schema relationships (e.g. `createUserSchema` omits exactly `id`).
 
-**NodeNext import quirk:** relative imports in `src/` (including test files) need an
-explicit `.js` extension — `import { userSchema } from "./user.schema.js"`, not
-`"./user.schema"`. A bare specifier runs under Vitest but fails `check-types` (TS2835).
+**Import convention:** relative imports in `src/` (including test files) are
+extensionless — `import { userSchema } from "./user.schema"`, not `"./user.schema.js"`.
+This package is bundled by `tsup` and its `tsconfig.json` uses `Bundler` module
+resolution, so `check-types` and Vitest both resolve bare specifiers (no NodeNext
+`.js`-suffix requirement).
 
 App-level usage of a validated result is tested in the consuming app, not here — see the
 full contract in [`.agents/rules/testing-strategy.md`](.agents/rules/testing-strategy.md).

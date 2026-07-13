@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyticsOverviewSchema, conversionSchema, profileRoiSchema, skillGapSchema, sourceDistributionSchema, techHeatmapSchema, userStatsSchema } from "./metrics.schema.js";
+import { analyticsOverviewSchema, conversionSchema, profileRoiSchema, skillGapSchema, sourceDistributionSchema, techHeatmapSchema, userStatsSchema } from "./metrics.schema";
 
 describe("profileRoiSchema", () => {
   const valid = { cvVersionId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301", applications: 12, interviews: 3, roi: 0.25 };

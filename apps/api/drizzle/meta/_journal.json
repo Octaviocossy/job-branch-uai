@@ -8,6 +8,13 @@
       "when": 1783789618832,
       "tag": "0000_fancy_marrow",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783964675555,
+      "tag": "0001_slimy_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

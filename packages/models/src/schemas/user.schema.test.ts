@@ -5,6 +5,7 @@ const validUser = {
   id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
   email: "ada@example.com",
   displayName: "Ada",
+  role: "postulante",
 };
 
 describe("userSchema", () => {
@@ -36,6 +37,15 @@ describe("userSchema", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.path).toContain("displayName");
+    }
+  });
+
+  it("rejects a role outside postulante/recruiter", () => {
+    const result = userSchema.safeParse({ ...validUser, role: "admin" });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toContain("role");
     }
   });
 });

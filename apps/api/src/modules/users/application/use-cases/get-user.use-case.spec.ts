@@ -6,7 +6,7 @@ import { GetUserUseCase } from "./get-user.use-case";
 
 describe("GetUserUseCase", () => {
   it("returns the user from the repository", async () => {
-    const user: User = { id: "u1", email: "a@b.com", displayName: "A" };
+    const user: User = { id: "u1", email: "a@b.com", displayName: "A", role: "postulante" };
     const repo = {
       create: vi.fn(),
       findById: vi.fn().mockResolvedValue(user),

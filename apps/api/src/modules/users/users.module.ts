@@ -10,6 +10,6 @@ import { UsersController } from "./presentation/users.controller";
 @Module({
   controllers: [UsersController],
   providers: [CreateUserUseCase, GetUserUseCase, ListUsersUseCase, UserCreatedListener, { provide: USER_REPOSITORY, useClass: DrizzleUserRepository }],
-  exports: [USER_REPOSITORY],
+  exports: [USER_REPOSITORY, GetUserUseCase],
 })
 export class UsersModule {}

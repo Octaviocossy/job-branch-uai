@@ -18,6 +18,12 @@ export const authResponseSchema = z.object({
   user: userSchema,
 });
 
+export const meResponseSchema = z.object({
+  user: userSchema,
+  permisos: z.array(z.string()),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type AuthResponse = z.infer<typeof authResponseSchema>;
+export type MeResponse = z.infer<typeof meResponseSchema>;

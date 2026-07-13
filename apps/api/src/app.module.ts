@@ -9,6 +9,7 @@ import { BranchesModule } from "./modules/branches/branches.module";
 import { CvVersionsModule } from "./modules/cv-versions/cv-versions.module";
 import { FollowupModule } from "./modules/followup/followup.module";
 import { HealthModule } from "./modules/health/health.module";
+import { SecurityModule } from "./modules/security/security.module";
 import { UsersModule } from "./modules/users/users.module";
 import { AuthSharedModule } from "./shared/auth/auth-shared.module";
 import { LoggerModule } from "./shared/logger/logger.module";
@@ -22,6 +23,7 @@ import { LoggerModule } from "./shared/logger/logger.module";
     AuthSharedModule,
     HealthModule,
     UsersModule,
+    SecurityModule,
     AuthModule,
     CvVersionsModule,
     BranchesModule,

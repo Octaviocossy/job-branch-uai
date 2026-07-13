@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { STATUS_CONFIG } from "@/config/status.config";
+import { CreateBranchDialog } from "@/features/branches/create-branch-dialog";
 import { useApplications } from "@/hooks/use-applications";
 import { useArchiveApplication } from "@/hooks/use-archive-application";
 import { useCloneApplication } from "@/hooks/use-clone-application";
@@ -34,6 +35,7 @@ function BranchesList({ applications }: { applications: Application[] }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "Todas">("Todas");
   const [showArchived, setShowArchived] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const cloneApplication = useCloneApplication();
   const archiveApplication = useArchiveApplication();
@@ -63,6 +65,7 @@ function BranchesList({ applications }: { applications: Application[] }) {
         </div>
         <button
           type="button"
+          onClick={() => setCreateOpen(true)}
           className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
@@ -151,6 +154,8 @@ function BranchesList({ applications }: { applications: Application[] }) {
           ))}
         </div>
       )}
+
+      <CreateBranchDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

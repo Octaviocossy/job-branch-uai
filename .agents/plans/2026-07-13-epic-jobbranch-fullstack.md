@@ -1,10 +1,11 @@
 # Plan: Epic — JobBranch full-stack (v0 prototype → apps/web + apps/api)
 
-> Status: **in-progress**
+> Status: **completed**
 > Created: 2026-07-13
 > Updated: 2026-07-13
 > Issue: #1
 > Integration branch: epic/1-jobbranch-fullstack
+> Epic PR: #11 (epic/1-jobbranch-fullstack → main)
 
 ## Goal
 
@@ -41,8 +42,8 @@ Both required at least once; implemented + unit-tested in **#10 (Security)**:
 | 2 | #6 | `6-cv-profiles` | CV profiles (full-stack) — VersionPerfil module (blob) + profiles screen | done |
 | 2 | #7 | `7-analytics` | Analytics (full-stack) — metrics endpoints + analytics screen | done |
 | 2 | #8 | `8-followup` | Follow-up / anti-ghosting (full-stack) — reminders module + follow-up screen | done |
-| 3 | #9 | `9-branches-dashboard-frontend` | Branches & dashboard frontend — /branches, /branches/[id], / wired to the API | pending |
-| 3 | #10 | `10-security-permission-matrix` | Security — permission matrix (Composite + Factory, mandatory patterns) [RF15] | pending |
+| 3 | #9 | `9-branches-dashboard-frontend` | Branches & dashboard frontend — /branches, /branches/[id], / wired to the API | done |
+| 3 | #10 | `10-security-permission-matrix` | Security — permission matrix (Composite + Factory, mandatory patterns) [RF15] | done |
 
 ## Dependency Edges
 

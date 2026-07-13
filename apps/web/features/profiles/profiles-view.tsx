@@ -4,6 +4,7 @@ import { FileText, GitBranch, Loader2, Plus, Star, TrendingUp, UploadCloud } fro
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CreateCvVersionDialog } from "@/features/profiles/create-cv-version-dialog";
 import { useCvVersions } from "@/hooks/use-cv-versions";
 import { useSetOutputProfile } from "@/hooks/use-set-output-profile";
 import { useUploadCv } from "@/hooks/use-upload-cv";
@@ -141,6 +142,7 @@ function CvVersionCard({ version, isBest }: { version: CvVersion; isBest: boolea
 
 export function ProfilesView() {
   const { data, isLoading } = useCvVersions();
+  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
@@ -149,7 +151,7 @@ export function ProfilesView() {
           <h1 className="font-semibold text-foreground text-xl">Perfiles CV</h1>
           <p className="mt-0.5 text-muted-foreground text-sm">Gestiona y versiona tus distintas configuraciones de perfil</p>
         </div>
-        <Button size="sm" className="gap-2">
+        <Button size="sm" className="gap-2" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Nueva Versión
         </Button>
@@ -160,6 +162,8 @@ export function ProfilesView() {
       {!isLoading && data?.type === EResult.ERROR && <p className="text-destructive text-sm">{data.value.getUserMessage()}</p>}
 
       {!isLoading && data?.type === EResult.SUCCESS && <ProfilesList versions={data.value} />}
+
+      <CreateCvVersionDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

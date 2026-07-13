@@ -3,7 +3,7 @@
 > Single source of truth for domain terminology. Update when entities, relationships,
 > or naming conventions change. AI tools should read this before inspecting source files.
 >
-> **Last updated**: 2026-07-13
+> **Last updated**: 2026-07-13 (branches backend)
 > **Canonical types**: `packages/models/src/schemas/`
 > **Persistence layer**: `apps/api/src/database/schema/` (Drizzle table definitions mirroring `@repo/models` shapes)
 >
@@ -94,6 +94,7 @@ Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 - `Oferta` and `Rechazado` are terminal states that allow archiving (`Archivado`, RF09).
 - Enum: `applicationStatusSchema` = `["Enviado", "Entrevista Técnica", "RRHH", "Oferta", "Rechazado", "Archivado"]`, defined in `hito.schema.ts`.
 - `PIPELINE_STAGES` (kanban column order, excludes the terminal `Archivado` stage) = `["Enviado", "RRHH", "Entrevista Técnica", "Oferta", "Rechazado"]` — ported verbatim from `apps/v0-prototype/lib/data.ts`; see Flagged ambiguities below.
+- `AddHitoUseCase` (`apps/api/src/modules/branches/application/use-cases/add-hito.use-case.ts`) enforces two guards — a branch already in a `TERMINAL_STATUSES` status (`Oferta`/`Rechazado`/`Archivado`, `apps/api/src/modules/branches/domain/terminal-statuses.ts`) cannot receive another hito, and a hito cannot set `status` to `Archivado` directly (use `POST /branches/:id/archive` instead). Both raise `InvalidStatusTransitionError` (`apps/api/src/modules/branches/domain/errors/invalid-status-transition.error.ts`), mapped to `400` by `BranchesController`. This does **not** enforce stage *order* — see Flagged ambiguities below.
 
 ---
 
@@ -102,6 +103,8 @@ Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 | Term | Definition | Payload | Transport |
 |------|-----------|---------|-----------|
 | **user.created** | Emitted by `CreateUserUseCase` (`apps/api/src/modules/users/application/use-cases/create-user.use-case.ts`) after a **User** is persisted. Consumed by `UserCreatedListener` (`apps/api/src/modules/users/application/listeners/user-created.listener.ts`). | `{ user: User }` — see `USER_CREATED_EVENT` in `apps/api/src/modules/users/domain/events/user-created.event.ts` | In-process, via NestJS `EventEmitter2` (`@nestjs/event-emitter`) |
+| **hito.created** | Emitted by `AddHitoUseCase` (`apps/api/src/modules/branches/application/use-cases/add-hito.use-case.ts`) after a **Hito** is appended to an **Application**'s `timeline`. Consumed by `HitoCreatedListener` (`apps/api/src/modules/branches/application/listeners/hito-created.listener.ts`) — currently a no-op/log placeholder for the future `Recordatorio` follow-up scheduling hook. | `{ branchId: string; hito: Hito }` — see `HITO_CREATED_EVENT` in `apps/api/src/modules/branches/domain/events/hito-created.event.ts` | In-process, via NestJS `EventEmitter2` (`@nestjs/event-emitter`) |
+| **branch.archived** | Emitted by `ArchiveBranchUseCase` (`apps/api/src/modules/branches/application/use-cases/archive-branch.use-case.ts`) after an **Application** is set to `archived: true` / `status: "Archivado"`. Consumed by `BranchArchivedListener` (`apps/api/src/modules/branches/application/listeners/branch-archived.listener.ts`) — currently a no-op/log placeholder for future analytics-cache invalidation. | `{ branch: Application }` — see `BRANCH_ARCHIVED_EVENT` in `apps/api/src/modules/branches/domain/events/branch-archived.event.ts` | In-process, via NestJS `EventEmitter2` (`@nestjs/event-emitter`) |
 
 ---
 
@@ -130,3 +133,4 @@ Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 | 2026-07-12 | apps/api tsconfig → shared nestjs.json (NodeNext, CJS); relative imports now extensionless | tsconfig consolidation |
 | 2026-07-12 | apps/api feature modules relocated to `src/modules/` (`users`, `health`) | Modules-folder convention adopted |
 | 2026-07-13 | Reset glossary to the full JobBranch domain: added **Auth payloads**, **CvVersion**, **Application**, **Vacante**, **Empresa**, **Hito**, **Feedback**, **Recordatorio**, **Metrics**; extended **User** with `role`; documented the CvVersion/Application state machines and the frontend view-model note | Epic #1 / issue #2 — foundation models + API persistence + glossary reset |
+| 2026-07-13 | Filled the `apps/api` `branches` module (list/get/create/clone/archive/add-hito/add-feedback use-cases + `DrizzleBranchRepository` denormalizing `applications`/`vacantes`/`empresas`/`hitos`/`cv_versions` into the flat `Application` shape); added `hito.created` and `branch.archived` domain events plus the `AddHitoUseCase` terminal-status / direct-`Archivado` guards | Epic #1 / issue #5 — branch management backend |

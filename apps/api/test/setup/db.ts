@@ -19,5 +19,7 @@ export function makeTestDb() {
 }
 
 export async function truncateAll(db: TestDatabase) {
-  await db.execute(sql`TRUNCATE TABLE "users" RESTART IDENTITY CASCADE`);
+  // "users" and "empresas" sit at the root of every FK chain (applications/cv_versions off
+  // users; vacantes off empresas) — CASCADE clears every dependent table transitively.
+  await db.execute(sql`TRUNCATE TABLE "users", "empresas" RESTART IDENTITY CASCADE`);
 }

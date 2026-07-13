@@ -3,6 +3,7 @@ export * from "./schemas/auth.schema.js";
 export * from "./schemas/cv-version.schema.js";
 export * from "./schemas/empresa.schema.js";
 export * from "./schemas/feedback.schema.js";
+export * from "./schemas/followup.schema.js";
 export * from "./schemas/hito.schema.js";
 export * from "./schemas/metrics.schema.js";
 export * from "./schemas/recordatorio.schema.js";

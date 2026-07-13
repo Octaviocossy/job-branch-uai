@@ -28,6 +28,7 @@ describe("Users (e2e)", () => {
   const validInput: CreateUserInput = {
     email: "jane@example.com",
     displayName: "Jane Doe",
+    role: "postulante",
   };
 
   it("POST /users creates a user", async () => {

@@ -3,10 +3,65 @@ import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { TERMINAL_STATUSES } from "../modules/branches/domain/terminal-statuses";
 import * as schema from "./schema/index";
 
 const DEMO_EMAIL = "demo@jobbranch.dev";
 const DEMO_PASSWORD = "JobBranch#2024";
+
+type Db = ReturnType<typeof drizzle<typeof schema>>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type Executor = Db | Tx;
+
+const FOLLOWUP_DUE_DAYS = 7;
+const FOLLOWUP_DAYS_INACTIVE = 7;
+
+function addDays(dateStr: string, days: number): string {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+const FEEDBACK_BY_COMPANY: Record<
+  string,
+  {
+    hitoStatus: string;
+    fechaEntrevista: string;
+    tipoEntrevista: "tecnica" | "cultural";
+    scoreTecnico: number;
+    scoreCultura: number;
+    comentarios: string;
+    habilidadesFaltantes: string[];
+  }
+> = {
+  "Mercado Libre": {
+    hitoStatus: "Entrevista Técnica",
+    fechaEntrevista: "2024-05-04",
+    tipoEntrevista: "tecnica",
+    scoreTecnico: 8,
+    scoreCultura: 7,
+    comentarios: "Buen manejo de React y TypeScript; resolvió con solidez los problemas de whiteboard.",
+    habilidadesFaltantes: ["AWS avanzado"],
+  },
+  "Santander Tech": {
+    hitoStatus: "Entrevista Técnica",
+    fechaEntrevista: "2024-04-02",
+    tipoEntrevista: "tecnica",
+    scoreTecnico: 9,
+    scoreCultura: 9,
+    comentarios: "Entrevista técnica sólida; buen liderazgo demostrado en preguntas de arquitectura.",
+    habilidadesFaltantes: [],
+  },
+  Ualá: {
+    hitoStatus: "Entrevista Técnica",
+    fechaEntrevista: "2024-05-08",
+    tipoEntrevista: "tecnica",
+    scoreTecnico: 7,
+    scoreCultura: 8,
+    comentarios: "Buen dominio de React; se sugiere reforzar microservicios y Kotlin en el backend.",
+    habilidadesFaltantes: ["Kotlin", "Microservicios"],
+  },
+};
 
 const CV_VERSIONS = [
   { name: "v1.0 — Fullstack General", focus: "General", tags: ["fullstack", "general"], estado: "disponible", esPerfilSalida: false, tamanioBytes: 245_760 },
@@ -160,7 +215,7 @@ const APPLICATIONS = [
   },
 ] as const;
 
-async function seedDemoUser(db: ReturnType<typeof drizzle<typeof schema>>) {
+async function seedDemoUser(db: Executor) {
   const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, DEMO_EMAIL));
 
   if (existing) {
@@ -184,7 +239,7 @@ async function seedDemoUser(db: ReturnType<typeof drizzle<typeof schema>>) {
   return created;
 }
 
-async function seedCvVersions(db: ReturnType<typeof drizzle<typeof schema>>, usuarioId: string) {
+async function seedCvVersions(db: Executor, usuarioId: string) {
   const cvVersionsByName = new Map<string, string>();
 
   for (const cv of CV_VERSIONS) {
@@ -211,7 +266,10 @@ async function seedCvVersions(db: ReturnType<typeof drizzle<typeof schema>>, usu
   return cvVersionsByName;
 }
 
-async function seedApplications(db: ReturnType<typeof drizzle<typeof schema>>, usuarioId: string, cvVersionsByName: Map<string, string>) {
+async function seedApplications(db: Executor, usuarioId: string, cvVersionsByName: Map<string, string>) {
+  let recordatorioCount = 0;
+  let feedbackCount = 0;
+
   for (const application of APPLICATIONS) {
     const [empresa] = await db.insert(schema.empresas).values({ nombre: application.company, industria: "Tecnología" }).returning();
 
@@ -267,29 +325,77 @@ async function seedApplications(db: ReturnType<typeof drizzle<typeof schema>>, u
       throw new Error(`Failed to seed application for ${application.company}`);
     }
 
+    const feedbackConfig = FEEDBACK_BY_COMPANY[application.company];
+
     for (const hito of application.timeline) {
-      await db.insert(schema.hitos).values({
+      const [createdHito] = await db
+        .insert(schema.hitos)
+        .values({
+          ramaId: rama.id,
+          date: hito.date,
+          status: hito.status,
+          note: "note" in hito ? hito.note : undefined,
+          daysInStage: "daysInStage" in hito ? hito.daysInStage : undefined,
+        })
+        .returning();
+
+      if (!createdHito) {
+        throw new Error(`Failed to seed hito for ${application.company}`);
+      }
+
+      if (feedbackConfig && hito.status === feedbackConfig.hitoStatus) {
+        await db.insert(schema.feedback).values({
+          hitoId: createdHito.id,
+          fechaEntrevista: feedbackConfig.fechaEntrevista,
+          tipoEntrevista: feedbackConfig.tipoEntrevista,
+          scoreTecnico: feedbackConfig.scoreTecnico,
+          scoreCultura: feedbackConfig.scoreCultura,
+          comentarios: feedbackConfig.comentarios,
+          habilidadesFaltantes: [...feedbackConfig.habilidadesFaltantes],
+        });
+        feedbackCount += 1;
+      }
+    }
+
+    if (!TERMINAL_STATUSES.includes(rama.status as (typeof TERMINAL_STATUSES)[number])) {
+      await db.insert(schema.recordatorios).values({
         ramaId: rama.id,
-        date: hito.date,
-        status: hito.status,
-        note: "note" in hito ? hito.note : undefined,
-        daysInStage: "daysInStage" in hito ? hito.daysInStage : undefined,
+        fechaVencimiento: addDays(application.lastUpdated, FOLLOWUP_DUE_DAYS),
+        diasInactividad: FOLLOWUP_DAYS_INACTIVE,
+        estado: "pendiente",
       });
+      recordatorioCount += 1;
     }
   }
+
+  return { recordatorioCount, feedbackCount };
 }
 
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const db = drizzle(pool, { schema });
 
-  const demoUser = await seedDemoUser(db);
-  const cvVersionsByName = await seedCvVersions(db, demoUser.id);
-  await seedApplications(db, demoUser.id, cvVersionsByName);
+  const { recordatorioCount, feedbackCount } = await db.transaction(async (tx) => {
+    // Reverse FK order so re-running the seeder never duplicates rows; the demo user
+    // itself stays stable via seedDemoUser's email guard.
+    await tx.delete(schema.feedback);
+    await tx.delete(schema.recordatorios);
+    await tx.delete(schema.hitos);
+    await tx.delete(schema.applications);
+    await tx.delete(schema.vacantes);
+    await tx.delete(schema.cvVersions);
+    await tx.delete(schema.empresas);
+
+    const demoUser = await seedDemoUser(tx);
+    const cvVersionsByName = await seedCvVersions(tx, demoUser.id);
+    return seedApplications(tx, demoUser.id, cvVersionsByName);
+  });
 
   await pool.end();
 
-  console.log(`Seeded demo user ${DEMO_EMAIL} with ${CV_VERSIONS.length} CV versions and ${APPLICATIONS.length} applications.`);
+  console.log(
+    `Seeded demo user ${DEMO_EMAIL} with ${CV_VERSIONS.length} CV versions, ${APPLICATIONS.length} applications, ${recordatorioCount} recordatorios, and ${feedbackCount} feedback entries.`,
+  );
 }
 
 main().catch((error) => {

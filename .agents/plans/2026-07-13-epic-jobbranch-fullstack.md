@@ -1,7 +1,8 @@
 # Plan: Epic — JobBranch full-stack (v0 prototype → apps/web + apps/api)
 
-> Status: **draft**
+> Status: **in-progress**
 > Created: 2026-07-13
+> Updated: 2026-07-13
 > Issue: #1
 > Integration branch: epic/1-jobbranch-fullstack
 
@@ -33,8 +34,8 @@ Both required at least once; implemented + unit-tested in **#10 (Security)**:
 
 | Wave | Issue | Branch | Title | Status |
 |------|-------|--------|-------|--------|
-| 1 | #2 | `2-foundation-models-and-persistence` | Foundation — `@repo/models` schemas + API persistence (Drizzle + seed + module stubs) + glossary reset | pending |
-| 1 | #3 | `3-foundation-web-shell` | Foundation — web design system, app shell & data-layer conventions | pending |
+| 1 | #2 | `2-foundation-models-and-persistence` | Foundation — `@repo/models` schemas + API persistence (Drizzle + seed + module stubs) + glossary reset | done |
+| 1 | #3 | `3-foundation-web-shell` | Foundation — web design system, app shell & data-layer conventions | done |
 | 2 | #4 | `4-auth-identity` | Auth & identity (full-stack) — register/login, BCrypt, JWT, role | pending |
 | 2 | #5 | `5-branches-backend` | Branch management backend — rama/vacante/empresa/hito/feedback module | pending |
 | 2 | #6 | `6-cv-profiles` | CV profiles (full-stack) — VersionPerfil module (blob) + profiles screen | pending |

@@ -8,7 +8,7 @@ import { CreateUserUseCase } from "./create-user.use-case";
 
 describe("CreateUserUseCase", () => {
   it("persists the user, emits user.created, and returns the created user", async () => {
-    const created: User = { id: "u1", email: "a@b.com", displayName: "A" };
+    const created: User = { id: "u1", email: "a@b.com", displayName: "A", role: "postulante" };
     const repo = {
       create: vi.fn().mockResolvedValue(created),
       findById: vi.fn(),
@@ -27,11 +27,13 @@ describe("CreateUserUseCase", () => {
     const result = await useCase.execute({
       email: "a@b.com",
       displayName: "A",
+      role: "postulante",
     });
 
     expect(repo.create).toHaveBeenCalledWith({
       email: "a@b.com",
       displayName: "A",
+      role: "postulante",
     });
     expect(eventEmitter.emit).toHaveBeenCalledWith(USER_CREATED_EVENT, {
       user: created,

@@ -23,6 +23,7 @@ describe("DrizzleUserRepository", () => {
     const input: CreateUserInput = {
       email: "alice@example.com",
       displayName: "Alice",
+      role: "postulante",
     };
 
     const user = await repo.create(input);
@@ -36,6 +37,7 @@ describe("DrizzleUserRepository", () => {
     const created = await repo.create({
       email: "bob@example.com",
       displayName: "Bob",
+      role: "postulante",
     });
 
     const found = await repo.findById(created.id);
@@ -55,10 +57,12 @@ describe("DrizzleUserRepository", () => {
     const first = await repo.create({
       email: "carol@example.com",
       displayName: "Carol",
+      role: "postulante",
     });
     const second = await repo.create({
       email: "dave@example.com",
       displayName: "Dave",
+      role: "recruiter",
     });
 
     const all = await repo.findAll();
@@ -71,10 +75,11 @@ describe("DrizzleUserRepository", () => {
     const dup: CreateUserInput = {
       email: "dupe@example.com",
       displayName: "Dupe One",
+      role: "postulante",
     };
 
     await repo.create(dup);
 
-    await expect(repo.create({ email: dup.email, displayName: "Dupe Two" })).rejects.toThrow();
+    await expect(repo.create({ email: dup.email, displayName: "Dupe Two", role: "postulante" })).rejects.toThrow();
   });
 });

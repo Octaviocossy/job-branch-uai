@@ -25,7 +25,7 @@ export function HomeView() {
     formState: { errors },
   } = useForm<CreateUserInput>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { email: "", displayName: "" },
+    defaultValues: { email: "", displayName: "", role: "postulante" },
   });
 
   const onSubmit = handleSubmit(async (values) => {

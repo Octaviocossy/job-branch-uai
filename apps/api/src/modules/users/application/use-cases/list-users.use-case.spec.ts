@@ -6,7 +6,7 @@ import { ListUsersUseCase } from "./list-users.use-case";
 
 describe("ListUsersUseCase", () => {
   it("returns the list of users from the repository", async () => {
-    const user: User = { id: "u1", email: "a@b.com", displayName: "A" };
+    const user: User = { id: "u1", email: "a@b.com", displayName: "A", role: "postulante" };
     const repo = {
       create: vi.fn(),
       findById: vi.fn(),

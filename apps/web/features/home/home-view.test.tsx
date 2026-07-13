@@ -74,6 +74,7 @@ describe("HomeView", () => {
         id: "00000000-0000-0000-0000-000000000000",
         email: "ada@example.com",
         displayName: "Ada",
+        role: "postulante",
       },
       status: 201,
     });
@@ -89,6 +90,7 @@ describe("HomeView", () => {
       expect(users_service.create).toHaveBeenCalledWith({
         email: "ada@example.com",
         displayName: "Ada",
+        role: "postulante",
       });
     });
   });
@@ -144,7 +146,7 @@ describe("HomeView", () => {
       });
       vi.mocked(users_service.list).mockResolvedValue({
         type: EResult.SUCCESS,
-        value: [{ id: "00000000-0000-0000-0000-000000000001", email: "ada@example.com", displayName: "Ada" }],
+        value: [{ id: "00000000-0000-0000-0000-000000000001", email: "ada@example.com", displayName: "Ada", role: "postulante" }],
         status: 200,
       });
 

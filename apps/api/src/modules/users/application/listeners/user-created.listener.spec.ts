@@ -14,7 +14,7 @@ describe("UserCreatedListener", () => {
       error: vi.fn(),
     } as unknown as AppLogger;
     const listener = new UserCreatedListener(logger);
-    const user: User = { id: "u1", email: "a@b.com", displayName: "A" };
+    const user: User = { id: "u1", email: "a@b.com", displayName: "A", role: "postulante" };
 
     listener.handleUserCreated({ user } satisfies UserCreatedEvent);
 

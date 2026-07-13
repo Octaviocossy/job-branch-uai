@@ -29,14 +29,14 @@ describe("useCreateUser", () => {
   it("invalidates the users query on success", async () => {
     vi.mocked(users_service.create).mockResolvedValue({
       type: EResult.SUCCESS,
-      value: { id: "00000000-0000-0000-0000-000000000000", email: "ada@example.com", displayName: "Ada" },
+      value: { id: "00000000-0000-0000-0000-000000000000", email: "ada@example.com", displayName: "Ada", role: "postulante" },
       status: 201,
     });
 
     const { wrapper, invalidate } = wrapperFactory();
     const { result } = renderHook(() => useCreateUser(), { wrapper });
 
-    await result.current.mutateAsync({ email: "ada@example.com", displayName: "Ada" });
+    await result.current.mutateAsync({ email: "ada@example.com", displayName: "Ada", role: "postulante" });
 
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["users"] });

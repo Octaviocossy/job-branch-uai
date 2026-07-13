@@ -1,9 +1,13 @@
 "use client";
 
-import { BarChart3, Bell, ChevronRight, FileText, GitBranch, LayoutDashboard, LogOut, Settings } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { BarChart3, Bell, ChevronRight, FileText, GitBranch, LayoutDashboard, LogOut } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useSession } from "@/hooks/use-session";
+import { SESSION_QUERY_KEY } from "@/query/session-query-key";
+import { clearAuthToken } from "@/utilities/auth-token.utility";
 import { cn } from "@/utilities/tailwind.utility";
 
 const NAV_ITEMS = [
@@ -14,8 +18,30 @@ const NAV_ITEMS = [
   { href: "/profiles", icon: FileText, label: "Perfiles CV" },
 ];
 
+function getInitials(displayName: string | undefined): string {
+  if (!displayName) return "?";
+
+  const initials = displayName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("");
+
+  return initials ? initials.toUpperCase() : "?";
+}
+
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user, isPending } = useSession();
+
+  const handleLogout = () => {
+    clearAuthToken();
+    queryClient.removeQueries({ queryKey: SESSION_QUERY_KEY });
+    router.push("/signin");
+  };
 
   return (
     <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -55,31 +81,25 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border px-2 py-3">
-        <Link
-          href="/settings"
-          className="group flex items-center gap-2.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        >
-          <Settings className="h-4 w-4 group-hover:text-primary" />
-          Configuracion
-        </Link>
-        <div className="mt-3 px-2">
+        <div className="px-2">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">
-              JP
+              {getInitials(user?.displayName)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-sidebar-foreground">Juan Perez</p>
-              <p className="truncate text-[10px] text-muted-foreground">juan@dev.com</p>
+              <p className="truncate text-xs font-medium text-sidebar-foreground">{isPending ? "Cargando…" : (user?.displayName ?? "Invitado")}</p>
+              <p className="truncate text-[10px] text-muted-foreground">{isPending ? "" : (user?.email ?? "")}</p>
             </div>
           </div>
         </div>
-        <Link
-          href="/signin"
-          className="group mt-2 flex items-center gap-2.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="group mt-2 flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
           <LogOut className="h-4 w-4 group-hover:text-destructive" />
           Cerrar sesion
-        </Link>
+        </button>
       </div>
     </aside>
   );

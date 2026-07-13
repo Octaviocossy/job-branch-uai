@@ -103,6 +103,10 @@ axios.interceptors.response.use(
       clearAuthToken();
       getRouterQueryClient()?.removeQueries({ queryKey: SESSION_QUERY_KEY });
 
+      if (typeof window !== "undefined" && window.location.pathname !== "/signin") {
+        window.location.assign("/signin");
+      }
+
       return Promise.reject(error);
     }
 

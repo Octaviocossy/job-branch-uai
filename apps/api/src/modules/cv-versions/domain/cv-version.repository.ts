@@ -23,6 +23,7 @@ export interface CvVersionRepository {
   create(params: CreateCvVersionParams): Promise<CvVersionRecord>;
   updateFile(id: string, usuarioId: string, params: UpdateCvFileParams): Promise<CvVersionRecord>;
   setOutputProfile(id: string, usuarioId: string): Promise<CvVersionRecord>;
+  setSnapshotVacante(id: string, usuarioId: string, vacanteId: string): Promise<CvVersionRecord>;
   archive(id: string, usuarioId: string): Promise<CvVersionRecord>;
   computeRendimiento(cvVersionId: string): Promise<CvVersionRendimiento>;
 }

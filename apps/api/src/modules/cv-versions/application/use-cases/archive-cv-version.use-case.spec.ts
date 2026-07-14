@@ -30,6 +30,7 @@ const seleccionado: CvVersionRecord = {
   estado: "seleccionado_salida",
   tamanioBytes: 1024,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 describe("ArchiveCvVersionUseCase", () => {

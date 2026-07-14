@@ -11,6 +11,7 @@ const validCvVersion = {
   tamanioBytes: 204800,
   createdAt: "2024-01-10",
   rendimiento: { applications: 12, interviews: 3 },
+  snapshotVacanteId: null,
 };
 
 describe("cvVersionEstadoSchema", () => {
@@ -53,6 +54,21 @@ describe("cvVersionSchema", () => {
       ...validCvVersion,
       rendimiento: { applications: 12, interviews: -1 },
     });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a uuid snapshotVacanteId", () => {
+    const result = cvVersionSchema.safeParse({
+      ...validCvVersion,
+      snapshotVacanteId: "3f2504e0-4f89-41d3-9a0c-0305e82c3302",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a non-uuid snapshotVacanteId", () => {
+    const result = cvVersionSchema.safeParse({ ...validCvVersion, snapshotVacanteId: "not-a-uuid" });
 
     expect(result.success).toBe(false);
   });

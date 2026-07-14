@@ -16,6 +16,7 @@ function toRecord(row: typeof cvVersions.$inferSelect): CvVersionRecord {
     estado: row.estado as CvVersionEstado,
     tamanioBytes: row.tamanioBytes ?? 0,
     createdAt: row.createdAt.toISOString().slice(0, 10),
+    snapshotVacanteId: row.snapshotVacanteId ?? null,
   };
 }
 

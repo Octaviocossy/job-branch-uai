@@ -27,6 +27,7 @@ const disponible = {
   tamanioBytes: 245_760,
   createdAt: "2024-01-10",
   rendimiento: { applications: 4, interviews: 2 },
+  snapshotVacanteId: null,
 };
 
 const seleccionadoSalida = {

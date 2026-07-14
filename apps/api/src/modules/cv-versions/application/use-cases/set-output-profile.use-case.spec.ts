@@ -30,6 +30,7 @@ const disponible: CvVersionRecord = {
   estado: "disponible",
   tamanioBytes: 1024,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 describe("SetOutputProfileUseCase", () => {

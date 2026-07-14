@@ -16,6 +16,7 @@ const recordA: CvVersionRecord = {
   estado: "disponible",
   tamanioBytes: 1024,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 const recordB: CvVersionRecord = { ...recordA, id: "cv2", name: "v2" };

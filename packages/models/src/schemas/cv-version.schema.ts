@@ -17,6 +17,7 @@ export const cvVersionSchema = z.object({
   tamanioBytes: z.number().int().positive(),
   createdAt: z.iso.date(),
   rendimiento: cvVersionRendimientoSchema,
+  snapshotVacanteId: z.uuid().nullable(),
 });
 
 export const createCvVersionSchema = cvVersionSchema.omit({ id: true, createdAt: true, rendimiento: true });

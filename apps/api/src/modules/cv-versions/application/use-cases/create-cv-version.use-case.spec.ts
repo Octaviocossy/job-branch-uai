@@ -30,6 +30,7 @@ const record: CvVersionRecord = {
   estado: "borrador",
   tamanioBytes: 0,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 describe("CreateCvVersionUseCase", () => {

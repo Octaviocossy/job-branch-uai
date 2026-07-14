@@ -30,6 +30,7 @@ const draft: CvVersionRecord = {
   estado: "borrador",
   tamanioBytes: 0,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 const validFile = { buffer: Buffer.from("pdf-bytes"), mimetype: "application/pdf", size: 1024 };

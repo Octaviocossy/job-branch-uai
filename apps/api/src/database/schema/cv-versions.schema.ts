@@ -1,5 +1,6 @@
 import { boolean, customType, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { users } from "./users.schema";
+import { vacantes } from "./vacantes.schema";
 
 export const bytea = customType<{ data: Buffer }>({
   dataType: () => "bytea",
@@ -18,4 +19,5 @@ export const cvVersions = pgTable("cv_versions", {
   archivoCv: bytea("archivo_cv"),
   tamanioBytes: integer("tamanio_bytes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  snapshotVacanteId: uuid("snapshot_vacante_id").references(() => vacantes.id),
 });

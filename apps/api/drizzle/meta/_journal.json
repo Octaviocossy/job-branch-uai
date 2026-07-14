@@ -15,6 +15,13 @@
       "when": 1783964675555,
       "tag": "0001_slimy_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783993855438,
+      "tag": "0002_goofy_strong_guy",
+      "breakpoints": true
     }
   ]
 }

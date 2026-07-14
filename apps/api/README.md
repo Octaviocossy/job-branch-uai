@@ -56,7 +56,7 @@ This is a summary — see [`.agents/rules/use-case-based-architecture.md`](.agen
 | `src/app.module.ts` | Root module — wires `ConfigModule`, `EventEmitterModule`, `LoggerModule`, `DatabaseModule`, feature modules |
 | `src/main.ts` | Bootstrap — creates the app, enables CORS, listens on `PORT` |
 
-`modules/users/` is the **reference feature** (all four layers + event + listener); `modules/health/` is the **minimal module** (controller only — no `domain/`/`infrastructure/`).
+`modules/users/` is the **reference feature** (all four layers + event + listener); `modules/health/` is the **minimal module** (controller only — no `domain/`/`infrastructure/`). `modules/persona/` follows the same four-layer shape for the actor hierarchy (`domain/persona.ts`'s `Persona`/`Recruiter`/`Postulante`, `CreatePersonaUseCase`, `DrizzlePersonaRepository`).
 
 ## Getting started
 
@@ -169,6 +169,8 @@ The full containerized stack (Postgres + API + web) is wired in the root [`docke
 ## Domain
 
 Canonical entities and events (`User`, the `user.created` event) live in the repo-root domain glossary — [`.agents/ubiquitous-language.md`](../../.agents/ubiquitous-language.md). Read it before touching domain types; the Drizzle `users` table mirrors the `@repo/models` `User` shape.
+
+Each `User` composes a `Persona` (`usuario_id`, unique FK), specialized by a `tipo` discriminant into `Recruiter` or `Postulante`, persisted in the `personas` table (single-table-with-discriminator) and created at registration by `modules/persona/`. `cv_versions` also carries a nullable `snapshot_vacante_id` (FK → `vacantes`) — the `VersionPerfil → Vacante` snapshot reference set via `PATCH /cv-versions/:id/snapshot-vacante`, alongside (not replacing) `applications.vacante_id`.
 
 ## Related docs
 

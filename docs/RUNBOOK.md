@@ -147,6 +147,8 @@ pnpm --filter api db:studio     # open Drizzle Studio against the dev DB
 
 Edit the Drizzle schema under `apps/api/src/database/schema/`, run `db:generate` to emit a new SQL migration into `apps/api/drizzle/`, then `db:migrate` to apply it.
 
+The committed migrations already include `apps/api/drizzle/0002_goofy_strong_guy.sql`, which added the `personas` table (the `Persona`/`Recruiter`/`Postulante` actor hierarchy, `usuario_id` unique FK → `users`) and `cv_versions.snapshot_vacante_id` (nullable FK → `vacantes`) — `db:migrate` applies it like any other pending migration, nothing extra to run.
+
 ### Test database
 
 The integration/e2e test tiers run against the **dedicated** `postgres-test` service on `:5433` (database `api_test`), using `apps/api/.env.test` — never the dev DB.

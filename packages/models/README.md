@@ -19,6 +19,14 @@ Today it exports the **User** entity:
 | `User` | type | `z.infer<typeof userSchema>`. |
 | `CreateUserInput` | type | `z.infer<typeof createUserSchema>`. |
 
+Later slices added further schemas alongside `User`, including `persona.schema.ts`
+(`personaSchema`, a discriminated union on `tipo` — `personaRecruiterSchema`/`PersonaRecruiter`
+and `postulanteSchema`/`Postulante`; the recruiter subtype is named `personaRecruiterSchema`/
+`PersonaRecruiter`, not `recruiterSchema`/`Recruiter`, to avoid colliding with
+`application.schema.ts`'s recruiter-contact view-model) and a `snapshotVacanteId` (nullable
+`z.uuid()`) field added to `cv-version.schema.ts`'s `cvVersionSchema` — the `VersionPerfil →
+Vacante` snapshot reference.
+
 The canonical entity names, fields, and persistence mapping live in the root
 [`.agents/ubiquitous-language.md`](../../.agents/ubiquitous-language.md).
 

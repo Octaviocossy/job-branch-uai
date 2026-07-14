@@ -3,6 +3,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import type { AuthResponse, RegisterInput, User } from "@repo/models";
 import { JwtService } from "../../../../shared/auth/jwt.service";
 import { AppLogger } from "../../../../shared/logger/app.logger";
+import { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
 import { USER_REPOSITORY, type UserRepository } from "../../../users/domain/user.repository";
 import { PasswordService } from "../password.service";
@@ -15,6 +16,7 @@ export class RegisterUseCase {
     private readonly jwtService: JwtService,
     private readonly logger: AppLogger,
     private readonly eventEmitter: EventEmitter2,
+    private readonly createPersonaUseCase: CreatePersonaUseCase,
   ) {
     this.logger.setContext(RegisterUseCase.name);
   }
@@ -40,6 +42,24 @@ export class RegisterUseCase {
 
     // Emit AFTER persistence succeeds — never before (see §7).
     this.eventEmitter.emit(USER_CREATED_EVENT, { user });
+
+    if (created.role === "recruiter") {
+      await this.createPersonaUseCase.execute({
+        tipo: "recruiter",
+        usuarioId: created.id,
+        puestoCorporativo: null,
+        perNombre: created.displayName,
+        perApellido: "",
+        fechaContratacion: new Date().toISOString().slice(0, 10),
+      });
+    } else {
+      await this.createPersonaUseCase.execute({
+        tipo: "postulante",
+        usuarioId: created.id,
+        puestoCorporativo: null,
+        habilidadesMaster: [],
+      });
+    }
 
     const token = this.jwtService.sign({ sub: user.id, role: user.role });
 

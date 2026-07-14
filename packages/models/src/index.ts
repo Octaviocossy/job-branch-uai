@@ -7,6 +7,7 @@ export * from "./schemas/followup.schema";
 export * from "./schemas/hito.schema";
 export * from "./schemas/metrics.schema";
 export * from "./schemas/permiso.schema";
+export * from "./schemas/persona.schema";
 export * from "./schemas/recordatorio.schema";
 export * from "./schemas/user.schema";
 export * from "./schemas/vacante.schema";

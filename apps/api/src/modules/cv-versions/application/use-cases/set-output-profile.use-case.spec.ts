@@ -11,6 +11,7 @@ function makeRepo(overrides: Partial<CvVersionRepository> = {}): CvVersionReposi
     create: vi.fn(),
     updateFile: vi.fn(),
     setOutputProfile: vi.fn(),
+    setSnapshotVacante: vi.fn(),
     archive: vi.fn(),
     computeRendimiento: vi.fn().mockResolvedValue({ applications: 3, interviews: 1 }),
     ...overrides,
@@ -30,6 +31,7 @@ const disponible: CvVersionRecord = {
   estado: "disponible",
   tamanioBytes: 1024,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 describe("SetOutputProfileUseCase", () => {

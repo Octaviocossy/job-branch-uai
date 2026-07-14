@@ -16,6 +16,7 @@ function toRecord(row: typeof cvVersions.$inferSelect): CvVersionRecord {
     estado: row.estado as CvVersionEstado,
     tamanioBytes: row.tamanioBytes ?? 0,
     createdAt: row.createdAt.toISOString().slice(0, 10),
+    snapshotVacanteId: row.snapshotVacanteId ?? null,
   };
 }
 
@@ -91,6 +92,20 @@ export class DrizzleCvVersionRepository implements CvVersionRepository {
 
       return toRecord(row);
     });
+  }
+
+  async setSnapshotVacante(id: string, usuarioId: string, vacanteId: string): Promise<CvVersionRecord> {
+    const [row] = await this.db
+      .update(cvVersions)
+      .set({ snapshotVacanteId: vacanteId })
+      .where(and(eq(cvVersions.id, id), eq(cvVersions.usuarioId, usuarioId)))
+      .returning();
+
+    if (!row) {
+      throw new NotFoundException(`CV version ${id} not found`);
+    }
+
+    return toRecord(row);
   }
 
   async archive(id: string, usuarioId: string): Promise<CvVersionRecord> {

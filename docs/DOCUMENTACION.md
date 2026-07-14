@@ -51,6 +51,25 @@ máquinas de estado del dominio. El glosario de dominio canónico del proyecto v
 | Autenticación | Registro/login nativo, JWT, rol elegido al registrarse | RF14 |
 | **Seguridad** | **Matriz de permisos por rol** — objeto de esta documentación | **RF15** |
 
+**Nota — jerarquía de actores (`Persona`).** Desde la alineación de dominio del Epic #18, la
+identidad del actor no vive solo en `users`: cada `User` **compone** (`usuario_id`, FK única)
+una `Persona`, especializada por un discriminante `tipo` en `Recruiter` (`perNombre`,
+`perApellido`, `fechaContratacion`) o `Postulante` (`habilidadesMaster`) — modelada como una
+unión discriminada Zod (`personaSchema`, `personaRecruiterSchema`, `postulanteSchema` en
+`packages/models/src/schemas/persona.schema.ts`) y persistida en `personas`
+(single-table-with-discriminator). La `Persona` se crea junto con el `User` al momento del
+registro (módulo `apps/api/src/modules/persona/`: `domain/persona.ts` con las clases
+`Persona`/`Recruiter`/`Postulante`, `CreatePersonaUseCase`, `DrizzlePersonaRepository`). Nótese
+que el subtipo recruiter se exporta como `personaRecruiterSchema`/`PersonaRecruiter` (no
+`recruiterSchema`/`Recruiter`) para no colisionar con el `Recruiter` de `application.schema.ts`
+(el view-model de contacto embebido en `Application`, un objeto distinto). Ver el glosario de
+dominio (`.agents/ubiquitous-language.md`) para el detalle completo.
+
+Cada `CvVersion` (`Repositorio de perfiles`) puede además llevar un `snapshotVacanteId`
+opcional (`cv_versions.snapshot_vacante_id`, FK nullable → `vacantes`) que referencia la
+`Vacante` a la que esa versión fue adjuntada al postular (`VersionPerfil → Vacante`) — coexiste
+con la referencia `Application.vacanteId` de la rama; ninguna de las dos quedó deprecada.
+
 ---
 
 ## 2. Arquitectura técnica
@@ -66,13 +85,14 @@ packages/
 ```
 
 - **`@repo/models`** es la única fuente de verdad del dominio: cada entidad (`User`,
-  `Application`, `CvVersion`, …) se define una vez como esquema Zod y se reutiliza tanto en
-  `apps/api` (validación de request/response, tipos de las tablas Drizzle) como en
+  `Persona`, `Application`, `CvVersion`, …) se define una vez como esquema Zod y se reutiliza
+  tanto en `apps/api` (validación de request/response, tipos de las tablas Drizzle) como en
   `apps/web` (tipos de las vistas).
 - **`apps/api`** sigue una arquitectura por **casos de uso** (hexagonal): cada módulo de
   NestJS separa `domain/` (entidades y reglas puras), `application/` (casos de uso y, en
   este módulo, la factory), `infrastructure/` (adaptadores a Drizzle/Postgres) y
-  `presentation/` (controladores HTTP).
+  `presentation/` (controladores HTTP). El módulo `apps/api/src/modules/persona/` sigue esta
+  misma forma para la jerarquía de actores (`Persona`/`Recruiter`/`Postulante`).
 - **`apps/web`** consume la API mediante una capa `hook → service → utilidad api → axios`,
   nunca accede a la base de datos ni implementa rutas de API propias.
 
@@ -94,8 +114,16 @@ para modelar la **matriz de permisos** como un árbol jerárquico: un permiso pu
 subgrupos (compuesto). Ambos se evalúan de la misma forma: "¿este componente concede la
 acción `X`?".
 
-Esto mapea directamente al modelo de dominio del proyecto: `ComponentePermiso` → `GrupoPermisos`
-(compuesto) / `Accion` (hoja), recorrido por el método `evaluar()`.
+Esto mapea directamente al modelo de dominio del proyecto: `ComponentePermiso` →
+`GrupoPermisos` (compuesto) / `Accion` (hoja), recorrido por el método `evaluar()`. El árbol
+real tiene además dos niveles de agrupación intermedios entre la raíz y las acciones —
+`Modulo` (p. ej. "Gestión de CV") y, dentro de cada módulo, `Formulario` (p. ej. el
+formulario de subida de CV) — de modo que la jerarquía completa es
+`Grupo → Modulo → Formulario → Accion`. `Modulo` y `Formulario` son subclases de
+`GrupoPermisos` que no agregan comportamiento propio: reutilizan tal cual la lógica Composite
+de su clase base, solo aportan un nombre de tipo distinto para que el árbol distinga el nivel
+"módulo" del nivel "formulario" (la opción de reutilización documentada como aceptable al
+planificar esta pieza).
 
 ### 3.2 Diagrama de clases
 
@@ -117,7 +145,22 @@ Esto mapea directamente al modelo de dominio del proyecto: `ComponentePermiso` �
       cada hijo (recursivo)        + obtenerHijos() → []
     + obtenerHijos() → hijos       + agregarHijo() → hereda el
     + agregarHijo(h) → push          throw de la clase base
+            △
+    ┌───────┴───────┐
+    │               │
+  Modulo         Formulario
+(extends        (extends
+ GrupoPermisos)  GrupoPermisos)
+  Sin campos ni métodos propios — heredan evaluar()/obtenerHijos()/agregarHijo()
+  de GrupoPermisos sin modificarlos. Son nodos compuestos igual que GrupoPermisos,
+  distinguidos solo por su nombre de tipo (para que el árbol represente
+  explícitamente el nivel "módulo" y el nivel "formulario").
 ```
+
+Un `Modulo` agrupa uno o más `Formulario`; cada `Formulario` agrupa una o más `Accion`. Como
+ambos heredan de `GrupoPermisos` sin sobrescribir nada, el árbol completo sigue siendo
+recorrible con **un solo método polimórfico** (`evaluar`) sin que ningún nodo necesite saber
+en qué nivel de anidamiento está — la esencia del patrón Composite.
 
 ### 3.3 Implementación
 
@@ -195,6 +238,51 @@ Este es el corazón del patrón: `evaluar()` delega recursivamente en cada hijo 
 la profundidad ni la forma del árbol** para responder "¿tengo el permiso `X`?" — cada nivel
 delega en el siguiente hasta llegar a una hoja.
 
+**Niveles de agrupación — `.../domain/modulo.ts` y `.../domain/formulario.ts`**
+
+```ts
+// apps/api/src/modules/security/domain/modulo.ts
+import { GrupoPermisos } from "./grupo-permisos";
+
+export class Modulo extends GrupoPermisos {}
+```
+
+```ts
+// apps/api/src/modules/security/domain/formulario.ts
+import { GrupoPermisos } from "./grupo-permisos";
+
+export class Formulario extends GrupoPermisos {}
+```
+
+`Modulo` y `Formulario` son subclases vacías de `GrupoPermisos`: no redefinen `evaluar`,
+`obtenerHijos` ni `agregarHijo`, así que se comportan exactamente como cualquier compuesto —
+la única razón de que existan como clases separadas (en vez de instanciar `GrupoPermisos`
+directamente en ambos niveles) es que el árbol resultante distinga, por tipo, un nodo
+"módulo" de un nodo "formulario" (útil para el diagrama de clases y para razonar sobre la
+matriz), sin duplicar ni una línea de lógica Composite.
+
+La fábrica (§4) construye cada rama del árbol con este helper:
+
+```ts
+// apps/api/src/modules/security/application/factories/matriz-permisos.factory.ts
+function crearModulo(id: string, nombre: string, acciones: Accion[]): Modulo {
+  const modulo = new Modulo(`mod.${id}`, nombre);
+  const formulario = new Formulario(`form.${id}`, nombre);
+
+  for (const accion of acciones) {
+    formulario.agregarHijo(accion);
+  }
+
+  modulo.agregarHijo(formulario);
+
+  return modulo;
+}
+```
+
+De modo que la raíz sigue siendo un `GrupoPermisos` simple (p. ej. `"postulante-root"`), pero
+cada rama que cuelga de ella ahora es `Modulo → Formulario → Accion` en vez de `Accion`
+directamente — ver el árbol completo en §3.4.
+
 **Cliente del árbol — `apps/api/src/modules/security/domain/contexto-seguridad.ts`**
 
 ```ts
@@ -239,24 +327,40 @@ export class ContextoSeguridad {
 
 ```
 GrupoPermisos "postulante-root"
-├── GrupoPermisos "Cuenta"
-│   ├── Accion "auth.me"
-│   └── Accion "security.viewMatrix"
-├── GrupoPermisos "Gestión de Ramas"
-│   ├── Accion "branch.create"
-│   ├── Accion "branch.clone"
-│   └── Accion "branch.archive"
-├── GrupoPermisos "Gestión de CV"
-│   ├── Accion "cv.create"
-│   ├── Accion "cv.upload"
-│   └── Accion "cv.setOutput"
-└── GrupoPermisos "Seguimiento"
-    └── Accion "followup.resolve"
+├── Modulo "Cuenta" (mod.cuenta)
+│   └── Formulario "Cuenta" (form.cuenta)
+│       ├── Accion "auth.me"
+│       └── Accion "security.viewMatrix"
+├── Modulo "Gestión de Ramas" (mod.branch)
+│   └── Formulario "Gestión de Ramas" (form.branch)
+│       ├── Accion "branch.create"
+│       ├── Accion "branch.clone"
+│       └── Accion "branch.archive"
+├── Modulo "Gestión de CV" (mod.cv)
+│   └── Formulario "Gestión de CV" (form.cv)
+│       ├── Accion "cv.create"
+│       ├── Accion "cv.upload"
+│       └── Accion "cv.setOutput"
+└── Modulo "Seguimiento" (mod.followup)
+    └── Formulario "Seguimiento" (form.followup)
+        └── Accion "followup.resolve"
 ```
 
-`contexto.tienePermiso("cv.upload")` recorre: raíz → evalúa cada grupo hijo → el grupo
-"Gestión de CV" evalúa sus hojas → `Accion("cv.upload").evaluar("cv.upload")` → `true`. La
-recursión corta apenas encuentra la primera hoja que coincide (`Array.some`).
+`contexto.tienePermiso("cv.upload")` recorre: raíz (`GrupoPermisos`) → evalúa cada `Modulo`
+hijo → el `Modulo` "Gestión de CV" delega en su único `Formulario` "Gestión de CV" → el
+`Formulario` evalúa sus hojas → `Accion("cv.upload").evaluar("cv.upload")` → `true`. La
+recursión corta apenas encuentra la primera hoja que coincide (`Array.some`), igual que
+antes — solo que ahora atraviesa dos niveles intermedios más (`Modulo` y `Formulario`) que
+en el árbol plano previo a esta pieza.
+
+**El resultado no cambia.** Tanto `tienePermiso` como `listarAcciones` (usado por
+`GET /security/matrix`) son agnósticos a la profundidad del árbol por construcción:
+`GrupoPermisos.evaluar` es un OR recursivo sobre `obtenerHijos()` sin importar cuántos
+niveles de compuesto haya antes de llegar a una hoja, y
+`ContextoSeguridad.flatten` (§3.3) recorre `obtenerHijos()` de la misma forma hasta
+encontrar instancias de `Accion`. Insertar `Modulo`/`Formulario` entre la raíz y las
+acciones **no cambia ni un solo código de acción resuelto** — es exactamente la garantía que
+ofrece Composite: el cliente (`ContextoSeguridad`) nunca necesitó conocer la forma del árbol.
 
 ---
 
@@ -285,21 +389,24 @@ export interface MatrizPermisosFactory {
 Un contrato mínimo: cualquier fábrica de matrices debe poder `crear()` una raíz
 `ComponentePermiso` (el árbol Composite descrito en la sección anterior).
 
-**Fábricas concretas — una por rol:**
+**Fábricas concretas — una por rol.** Ambas usan el helper `crearModulo` (§3.3), que arma la
+rama `Modulo → Formulario → Accion[]` para un grupo de acciones dado:
 
 ```ts
 export class PostulanteMatrizFactory implements MatrizPermisosFactory {
   crear(): ComponentePermiso {
     const root = new GrupoPermisos("postulante-root", "Permisos Postulante");
 
-    const cuentaGroup = new GrupoPermisos("postulante-cuenta", "Cuenta");
-    cuentaGroup.agregarHijo(new Accion("auth.me", "Ver perfil propio", "auth.me"));
-    cuentaGroup.agregarHijo(new Accion("security.viewMatrix", "Ver matriz de permisos", "security.viewMatrix"));
+    const cuentaGroup = crearModulo("cuenta", "Cuenta", [
+      new Accion("auth.me", "Ver perfil propio", "auth.me"),
+      new Accion("security.viewMatrix", "Ver matriz de permisos", "security.viewMatrix"),
+    ]);
 
-    const branchGroup = new GrupoPermisos("postulante-branch", "Gestión de Ramas");
-    branchGroup.agregarHijo(new Accion("branch.create", "Crear rama", "branch.create"));
-    branchGroup.agregarHijo(new Accion("branch.clone", "Clonar rama", "branch.clone"));
-    branchGroup.agregarHijo(new Accion("branch.archive", "Archivar rama", "branch.archive"));
+    const branchGroup = crearModulo("branch", "Gestión de Ramas", [
+      new Accion("branch.create", "Crear rama", "branch.create"),
+      new Accion("branch.clone", "Clonar rama", "branch.clone"),
+      new Accion("branch.archive", "Archivar rama", "branch.archive"),
+    ]);
 
     // ... grupos "Gestión de CV" y "Seguimiento" (ver código fuente completo)
 
@@ -313,8 +420,9 @@ export class PostulanteMatrizFactory implements MatrizPermisosFactory {
 export class RecruiterMatrizFactory implements MatrizPermisosFactory {
   crear(): ComponentePermiso {
     const root = new GrupoPermisos("recruiter-root", "Permisos Recruiter");
-    // grupos "Cuenta", "Gestión de Tablero", "Gestión de Candidatos"
-    // con acciones distintas a las del postulante (board.view, candidate.addFeedback, …)
+    // módulos "Cuenta", "Gestión de Tablero", "Gestión de Candidatos" — cada uno vía
+    // crearModulo, con acciones distintas a las del postulante (board.view,
+    // candidate.addFeedback, …)
     return root;
   }
 }
@@ -322,7 +430,9 @@ export class RecruiterMatrizFactory implements MatrizPermisosFactory {
 
 Cada fábrica concreta es responsable de un rol y sabe exactamente qué subárbol de permisos
 le corresponde — `PostulanteMatrizFactory` arma acciones sobre ramas/CV/seguimiento propio;
-`RecruiterMatrizFactory` arma acciones sobre el tablero y los candidatos.
+`RecruiterMatrizFactory` arma acciones sobre el tablero y los candidatos. La raíz sigue
+siendo un `GrupoPermisos` plano; es `crearModulo` quien introduce los niveles `Modulo`/
+`Formulario` en cada rama.
 
 **Selector de fábrica (Abstract Factory):**
 
@@ -392,7 +502,7 @@ Composite, y lo envuelve en un `ContextoSeguridad` listo para consultar. Este es
                            → new ContextoSeguridad(root)
                           │
 5. PermissionsGuard llama contexto.tienePermiso('security.viewMatrix')
-   → recorre el árbol Composite (GrupoPermisos → ... → Accion)  ◄── Composite
+   → recorre el árbol Composite (GrupoPermisos → Modulo → Formulario → Accion)  ◄── Composite
    → true/false
                           │
 6. Si es false → ForbiddenException (403). Si es true → el controlador ejecuta

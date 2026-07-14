@@ -11,6 +11,7 @@ function makeRepo(overrides: Partial<CvVersionRepository> = {}): CvVersionReposi
     create: vi.fn(),
     updateFile: vi.fn(),
     setOutputProfile: vi.fn(),
+    setSnapshotVacante: vi.fn(),
     archive: vi.fn(),
     computeRendimiento: vi.fn().mockResolvedValue({ applications: 0, interviews: 0 }),
     ...overrides,
@@ -30,6 +31,7 @@ const draft: CvVersionRecord = {
   estado: "borrador",
   tamanioBytes: 0,
   createdAt: "2024-01-10",
+  snapshotVacanteId: null,
 };
 
 const validFile = { buffer: Buffer.from("pdf-bytes"), mimetype: "application/pdf", size: 1024 };

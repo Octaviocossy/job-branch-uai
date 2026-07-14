@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Accion } from "./accion";
 import { ContextoSeguridad } from "./contexto-seguridad";
+import { Formulario } from "./formulario";
 import { GrupoPermisos } from "./grupo-permisos";
+import { Modulo } from "./modulo";
 
 function buildNestedTree(): GrupoPermisos {
   const root = new GrupoPermisos("root", "Root");
@@ -49,6 +51,35 @@ describe("ContextoSeguridad", () => {
 
     expect(contexto.tienePermiso("branch.create")).toBe(false);
     expect(contexto.tienePermiso("board.view")).toBe(true);
+  });
+});
+
+describe("ContextoSeguridad with a Grupo -> Modulo -> Formulario -> Accion tree", () => {
+  function buildDeepTree(): GrupoPermisos {
+    const root = new GrupoPermisos("root", "Root");
+    const cvModulo = new Modulo("mod.cv", "Módulo CV");
+    const cvForm = new Formulario("form.cv", "Formulario CV");
+
+    cvForm.agregarHijo(new Accion("cv.create", "Crear versión de CV", "cv.create"));
+    cvForm.agregarHijo(new Accion("cv.upload", "Subir archivo de CV", "cv.upload"));
+    cvModulo.agregarHijo(cvForm);
+    root.agregarHijo(cvModulo);
+
+    return root;
+  }
+
+  it("resolves a leaf Accion nested four levels deep", () => {
+    const contexto = new ContextoSeguridad(buildDeepTree());
+
+    expect(contexto.tienePermiso("cv.create")).toBe(true);
+    expect(contexto.tienePermiso("cv.upload")).toBe(true);
+    expect(contexto.tienePermiso("board.view")).toBe(false);
+  });
+
+  it("flattens every leaf action regardless of depth via listarAcciones", () => {
+    const contexto = new ContextoSeguridad(buildDeepTree());
+
+    expect(contexto.listarAcciones().sort()).toEqual(["cv.create", "cv.upload"]);
   });
 });
 

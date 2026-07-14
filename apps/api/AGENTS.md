@@ -41,3 +41,10 @@ Domain types (e.g. `User`, `CreateUserInput`) come from `@repo/models`, the shar
 package. The Drizzle `users` table in `apps/api/src/database/schema/` mirrors that schema's
 shape. See `.agents/ubiquitous-language.md` (repo root) for the canonical entity definitions
 and their aliases-to-avoid.
+
+Feature modules live under `src/modules/`, one per bounded concern — `users`, `persona`
+(the `Persona`/`Recruiter`/`Postulante` actor hierarchy, composing `User` via `usuario_id`),
+`auth`, `cv-versions`, `branches`, `analytics`, `followup`, `security`, `health`.
+`modules/persona/` follows the same use-case layout as every other module
+(`domain/persona.ts`, `persona.repository.ts`, `create-persona.use-case.ts`,
+`drizzle-persona.repository.ts`, `persona.module.ts`).

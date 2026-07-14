@@ -30,6 +30,7 @@ describe("ListCvVersionsUseCase", () => {
       create: vi.fn(),
       updateFile: vi.fn(),
       setOutputProfile: vi.fn(),
+      setSnapshotVacante: vi.fn(),
       archive: vi.fn(),
       computeRendimiento,
     };

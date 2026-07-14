@@ -94,6 +94,20 @@ export class DrizzleCvVersionRepository implements CvVersionRepository {
     });
   }
 
+  async setSnapshotVacante(id: string, usuarioId: string, vacanteId: string): Promise<CvVersionRecord> {
+    const [row] = await this.db
+      .update(cvVersions)
+      .set({ snapshotVacanteId: vacanteId })
+      .where(and(eq(cvVersions.id, id), eq(cvVersions.usuarioId, usuarioId)))
+      .returning();
+
+    if (!row) {
+      throw new NotFoundException(`CV version ${id} not found`);
+    }
+
+    return toRecord(row);
+  }
+
   async archive(id: string, usuarioId: string): Promise<CvVersionRecord> {
     const [row] = await this.db
       .update(cvVersions)

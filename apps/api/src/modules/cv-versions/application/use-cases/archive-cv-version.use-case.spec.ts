@@ -11,6 +11,7 @@ function makeRepo(overrides: Partial<CvVersionRepository> = {}): CvVersionReposi
     create: vi.fn(),
     updateFile: vi.fn(),
     setOutputProfile: vi.fn(),
+    setSnapshotVacante: vi.fn(),
     archive: vi.fn(),
     computeRendimiento: vi.fn().mockResolvedValue({ applications: 5, interviews: 2 }),
     ...overrides,

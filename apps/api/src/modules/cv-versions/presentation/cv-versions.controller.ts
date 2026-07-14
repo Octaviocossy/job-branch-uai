@@ -50,11 +50,7 @@ export class CvVersionsController {
   }
 
   @Patch(":id/snapshot-vacante")
-  setSnapshotVacante(
-    @CurrentUser() user: JwtPayload,
-    @Param("id") id: string,
-    @Body(new ZodValidationPipe(setSnapshotVacanteSchema)) body: SetSnapshotVacanteBody,
-  ) {
+  setSnapshotVacante(@CurrentUser() user: JwtPayload, @Param("id") id: string, @Body(new ZodValidationPipe(setSnapshotVacanteSchema)) body: SetSnapshotVacanteBody) {
     return this.setSnapshotVacanteUseCase.execute(id, user.sub, body.vacanteId);
   }
 

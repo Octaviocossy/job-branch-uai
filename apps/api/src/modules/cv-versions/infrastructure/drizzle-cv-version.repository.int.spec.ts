@@ -44,10 +44,7 @@ describe("DrizzleCvVersionRepository", () => {
       throw new Error("Failed to seed the empresa");
     }
 
-    const [vacante] = await db
-      .insert(vacantes)
-      .values({ titulo: "Backend Engineer", descripcion: "...", rangoSalarial: "USD 60-80k", empresaId: empresa.id })
-      .returning();
+    const [vacante] = await db.insert(vacantes).values({ titulo: "Backend Engineer", descripcion: "...", rangoSalarial: "USD 60-80k", empresaId: empresa.id }).returning();
 
     if (!vacante) {
       throw new Error("Failed to seed the vacante");

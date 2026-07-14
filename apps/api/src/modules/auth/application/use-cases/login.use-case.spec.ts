@@ -63,9 +63,7 @@ describe("LoginUseCase", () => {
     const logger = makeLogger();
     const useCase = new LoginUseCase(repo, passwordService, jwtService, logger);
 
-    await expect(useCase.execute({ email: "missing@b.com", password: "whatever" })).rejects.toThrow(
-      new UnauthorizedException("Email o contraseña incorrectos"),
-    );
+    await expect(useCase.execute({ email: "missing@b.com", password: "whatever" })).rejects.toThrow(new UnauthorizedException("Email o contraseña incorrectos"));
     expect(repo.incrementFailedAttempts).not.toHaveBeenCalled();
     expect(passwordService.compare).not.toHaveBeenCalled();
   });

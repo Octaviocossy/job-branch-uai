@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateHitoInput } from "@/models";
+import { invalidateBranchDependentQueries } from "@/query/branch-dependent-keys";
 import { applications_service } from "@/services/applications.service";
 
 export const useAddHito = () => {
@@ -8,7 +9,7 @@ export const useAddHito = () => {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: CreateHitoInput }) => applications_service.addHito(id, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      invalidateBranchDependentQueries(queryClient);
     },
   });
 };

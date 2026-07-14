@@ -4,8 +4,8 @@ import { RequiereAccion } from "../../../common/decorators/requiere-accion.decor
 import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { ZodValidationPipe } from "../../../common/pipes/zod-validation.pipe";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
-import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
+import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
 import { ResolverPermisosUseCase } from "../../security/application/use-cases/resolver-permisos.use-case";
 import { GetUserUseCase } from "../../users/application/use-cases/get-user.use-case";
 import { LoginUseCase } from "../application/use-cases/login.use-case";

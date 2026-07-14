@@ -86,6 +86,41 @@ describe("axios.config", () => {
       expect(seenConfig?.headers.get("Authorization")).toBeUndefined();
       expect(seenConfig?.headers.get("X-Request-ID")).toEqual(expect.any(String));
     });
+
+    it("removes the JSON Content-Type for FormData so the browser sets the multipart boundary", async () => {
+      let seenConfig: InternalAxiosRequestConfig | undefined;
+
+      setAdapter(async (config) => {
+        seenConfig = config;
+
+        return buildResponse(config, 200);
+      });
+
+      const form = new FormData();
+      form.append("file", new Blob(["cv-bytes"], { type: "application/pdf" }), "cv.pdf");
+
+      await axios.post("/cv-versions/abc/file", form);
+
+      // Content-Type must be axios's "never set" sentinel (`false`), not application/json
+      // (which would trigger JSON serialization) or a default the browser can't override.
+      expect(seenConfig?.headers.get("Content-Type")).toBe(false);
+      // The FormData body passes through untouched (not stringified to JSON).
+      expect(seenConfig?.data).toBeInstanceOf(FormData);
+    });
+
+    it("keeps application/json Content-Type for plain object bodies", async () => {
+      let seenConfig: InternalAxiosRequestConfig | undefined;
+
+      setAdapter(async (config) => {
+        seenConfig = config;
+
+        return buildResponse(config, 200);
+      });
+
+      await axios.post("/cv-versions", { name: "Backend", focus: "backend" });
+
+      expect(seenConfig?.headers.get("Content-Type")).toContain("application/json");
+    });
   });
 
   describe("retry policy", () => {

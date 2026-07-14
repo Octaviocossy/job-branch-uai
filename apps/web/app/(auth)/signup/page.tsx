@@ -135,10 +135,7 @@ export default function SignUpPage() {
                   {PASSWORD_REQUIREMENTS.map((requirement) => (
                     <li
                       key={requirement.label}
-                      className={cn(
-                        "flex items-center gap-2 text-xs transition-colors",
-                        requirement.test(password) ? "text-[oklch(0.65_0.2_140)]" : "text-muted-foreground",
-                      )}
+                      className={cn("flex items-center gap-2 text-xs transition-colors", requirement.test(password) ? "text-[oklch(0.65_0.2_140)]" : "text-muted-foreground")}
                     >
                       <CheckCircle2 className={cn("h-3 w-3", requirement.test(password) ? "opacity-100" : "opacity-30")} />
                       {requirement.label}

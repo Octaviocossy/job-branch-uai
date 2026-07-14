@@ -43,9 +43,7 @@ export class PostulanteMatrizFactory implements MatrizPermisosFactory {
       new Accion("cv.setOutput", "Definir perfil de salida", "cv.setOutput"),
     ]);
 
-    const followupGroup = crearModulo("followup", "Seguimiento", [
-      new Accion("followup.resolve", "Resolver seguimiento", "followup.resolve"),
-    ]);
+    const followupGroup = crearModulo("followup", "Seguimiento", [new Accion("followup.resolve", "Resolver seguimiento", "followup.resolve")]);
 
     root.agregarHijo(cuentaGroup);
     root.agregarHijo(branchGroup);

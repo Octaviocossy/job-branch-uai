@@ -3,8 +3,8 @@ import type { PermissionMatrix, UserRole } from "@repo/models";
 import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
 import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
-import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
+import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
 import { ResolverPermisosUseCase } from "../application/use-cases/resolver-permisos.use-case";
 
 @Controller("security")

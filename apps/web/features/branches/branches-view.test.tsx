@@ -9,8 +9,13 @@ vi.mock("@/services/applications.service", () => ({
   applications_service: { list: vi.fn(), getById: vi.fn(), create: vi.fn(), clone: vi.fn(), archive: vi.fn(), addHito: vi.fn() },
 }));
 
+vi.mock("@/services/cv-versions.service", () => ({
+  cv_versions_service: { list: vi.fn(), create: vi.fn(), uploadFile: vi.fn(), setOutputProfile: vi.fn(), archive: vi.fn() },
+}));
+
 import { BranchesView } from "@/features/branches/branches-view";
 import { applications_service } from "@/services/applications.service";
+import { cv_versions_service } from "@/services/cv-versions.service";
 
 const MELI: Application = {
   id: "app-1",
@@ -53,6 +58,7 @@ describe("BranchesView", () => {
   beforeEach(() => {
     vi.mocked(applications_service.list).mockReset();
     vi.mocked(applications_service.clone).mockReset();
+    vi.mocked(cv_versions_service.list).mockReset();
   });
 
   it("filters by search text and hides archived branches until toggled", async () => {
@@ -106,5 +112,29 @@ describe("BranchesView", () => {
     await waitFor(() => {
       expect(applications_service.list).toHaveBeenCalledTimes(2);
     });
+  }, 15000);
+
+  it("opens the Nueva Rama dialog without crashing", async () => {
+    vi.mocked(applications_service.list).mockResolvedValue({
+      type: EResult.SUCCESS,
+      value: [MELI],
+      status: 200,
+    });
+    vi.mocked(cv_versions_service.list).mockResolvedValue({
+      type: EResult.SUCCESS,
+      value: [],
+      status: 200,
+    });
+
+    const user = userEvent.setup();
+    renderWithClient(<BranchesView />);
+
+    await screen.findByText("Mercado Libre");
+    await user.click(screen.getByRole("button", { name: /Nueva Rama/i }));
+
+    // If the techStack default regresses to an array, RHF throws on mount and
+    // this assertion never resolves — the dialog title proves it mounted cleanly.
+    expect(await screen.findByText("Registra un nuevo proceso de postulación.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Stack (separado por coma)")).toBeInTheDocument();
   }, 15000);
 });

@@ -44,9 +44,7 @@ function SelectContent({ className, children, position = "popper", ...props }: C
         position={position}
         {...props}
       >
-        <SelectPrimitive.Viewport
-          className={cn("p-1", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]")}
-        >
+        <SelectPrimitive.Viewport className={cn("p-1", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]")}>
           {children}
         </SelectPrimitive.Viewport>
       </SelectPrimitive.Content>

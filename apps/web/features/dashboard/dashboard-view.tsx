@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, Building2, Clock, ExternalLink, GitBranch, Plus, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Clock, ExternalLink, GitBranch, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
@@ -49,18 +49,9 @@ function Dashboard({ applications }: { applications: Application[] }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-semibold text-foreground text-xl">Dashboard</h1>
-          <p className="mt-0.5 text-muted-foreground text-sm">Pipeline activo — {new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
-        </div>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-primary-foreground text-sm font-medium transition-colors hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva Rama
-        </button>
+      <div>
+        <h1 className="font-semibold text-foreground text-xl">Dashboard</h1>
+        <p className="mt-0.5 text-muted-foreground text-sm">Pipeline activo — {new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

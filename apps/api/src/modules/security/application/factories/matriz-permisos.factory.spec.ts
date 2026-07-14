@@ -14,15 +14,7 @@ const POSTULANTE_ACCIONES = [
   "followup.resolve",
 ].sort();
 
-const RECRUITER_ACCIONES = [
-  "auth.me",
-  "security.viewMatrix",
-  "board.view",
-  "board.updateStage",
-  "candidate.view",
-  "candidate.addFeedback",
-  "candidate.scheduleInterview",
-].sort();
+const RECRUITER_ACCIONES = ["auth.me", "security.viewMatrix", "board.view", "board.updateStage", "candidate.view", "candidate.addFeedback", "candidate.scheduleInterview"].sort();
 
 describe("PostulanteMatrizFactory", () => {
   it("builds a non-empty tree scoped to postulante actions (BR-4)", () => {

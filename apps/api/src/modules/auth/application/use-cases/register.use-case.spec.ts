@@ -145,9 +145,7 @@ describe("RegisterUseCase", () => {
     });
     const useCase = new RegisterUseCase(repo, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase);
 
-    await expect(useCase.execute({ email: "a@b.com", password: "supersecret", displayName: "A", role: "postulante" })).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(useCase.execute({ email: "a@b.com", password: "supersecret", displayName: "A", role: "postulante" })).rejects.toBeInstanceOf(ConflictException);
     expect(repo.create).not.toHaveBeenCalled();
     expect(eventEmitter.emit).not.toHaveBeenCalled();
     expect(createPersonaUseCase.execute).not.toHaveBeenCalled();

@@ -29,7 +29,7 @@ export function CreateBranchDialog({ open, onOpenChange }: CreateBranchDialogPro
     formState: { errors },
   } = useForm<CreateApplicationInput>({
     resolver: zodResolver(createApplicationSchema),
-    defaultValues: { status: "Enviado", cvVersion: "", techStack: [], archived: false },
+    defaultValues: { status: "Enviado", cvVersion: "", archived: false },
   });
 
   useEffect(() => {
@@ -129,11 +129,13 @@ export function CreateBranchDialog({ open, onOpenChange }: CreateBranchDialogPro
               type="text"
               placeholder="react, typescript, node"
               {...register("techStack", {
-                setValueAs: (value: string) =>
-                  (value ?? "")
+                setValueAs: (value: unknown): string[] => {
+                  if (Array.isArray(value)) return value as string[];
+                  return String(value ?? "")
                     .split(",")
                     .map((tech) => tech.trim())
-                    .filter(Boolean),
+                    .filter(Boolean);
+                },
               })}
             />
             {errors.techStack && <p className="text-destructive text-xs">{errors.techStack.message}</p>}

@@ -43,8 +43,20 @@ export function AnalyticsView() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <KpiCard icon={<Target className="h-4 w-4" />} label="Tasa de Conversión" value={formatPercent(conversionRate)} sub="aplicaciones → oferta" colorClassName="text-chart-4" />
         <KpiCard icon={<Zap className="h-4 w-4" />} label="Llegan a Técnica" value={formatPercent(technicalRate)} sub="aplicaciones → entrevista" colorClassName="text-chart-3" />
-        <KpiCard icon={<TrendingUp className="h-4 w-4" />} label="ROI Global" value={formatPercent(overview.stats.roiGlobal)} sub="entrevistas / aplicaciones" colorClassName="text-chart-1" />
-        <KpiCard icon={<AlertCircle className="h-4 w-4" />} label="Gaps de Habilidades" value={overview.stats.gapHabilidades.length} sub="tecnologías a reforzar" colorClassName="text-chart-5" />
+        <KpiCard
+          icon={<TrendingUp className="h-4 w-4" />}
+          label="ROI Global"
+          value={formatPercent(overview.stats.roiGlobal)}
+          sub="entrevistas / aplicaciones"
+          colorClassName="text-chart-1"
+        />
+        <KpiCard
+          icon={<AlertCircle className="h-4 w-4" />}
+          label="Gaps de Habilidades"
+          value={overview.stats.gapHabilidades.length}
+          sub="tecnologías a reforzar"
+          colorClassName="text-chart-5"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -215,19 +227,7 @@ function StateMessage({ children }: { children: ReactNode }) {
   );
 }
 
-function KpiCard({
-  icon,
-  label,
-  value,
-  sub,
-  colorClassName,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string | number;
-  sub: string;
-  colorClassName: string;
-}) {
+function KpiCard({ icon, label, value, sub, colorClassName }: { icon: ReactNode; label: string; value: string | number; sub: string; colorClassName: string }) {
   return (
     <Card>
       <CardContent className="p-4">

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateApplicationInput } from "@/models";
+import { invalidateBranchDependentQueries } from "@/query/branch-dependent-keys";
 import { applications_service } from "@/services/applications.service";
 
 export const useCreateApplication = () => {
@@ -8,7 +9,7 @@ export const useCreateApplication = () => {
   return useMutation({
     mutationFn: (input: CreateApplicationInput) => applications_service.create(input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      invalidateBranchDependentQueries(queryClient);
     },
   });
 };

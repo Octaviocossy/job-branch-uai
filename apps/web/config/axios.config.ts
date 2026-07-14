@@ -37,6 +37,17 @@ axios.interceptors.request.use(
       config.headers.set("Authorization", `Bearer ${token}`);
     }
 
+    // FormData must be sent as multipart/form-data with a browser-generated boundary.
+    // The instance default `Content-Type: application/json` would otherwise make axios
+    // 1.x serialize the FormData to JSON (dropping the file). `delete()` alone isn't
+    // enough: axios's dispatchRequest re-adds `application/x-www-form-urlencoded` for
+    // POST/PUT/PATCH whenever no Content-Type is set. Setting it to `false` is axios's
+    // sentinel for "never set this header" (filtered out before the request is sent),
+    // which blocks that re-injection and lets the browser set the multipart boundary.
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      config.headers.set("Content-Type", false);
+    }
+
     if (isDev) {
       console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
         requestId,

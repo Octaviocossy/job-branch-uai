@@ -1,35 +1,54 @@
 #!/bin/sh
-# run-parallel-issues.sh — execute one "wave" of GitHub issues in parallel.
+# run-parallel-issues.sh — run one "wave" of GitHub issues through the staged
+# epic pipeline: plain run -> --review -> --rework (optional) -> --integrate.
 #
-# Each argument is ONE child issue, encoded as:  <issue>:<branch>:<title>
+# Each positional argument is ONE child issue, encoded as:  <issue>:<branch>:<title>
 #   <issue>  numeric GitHub issue number (no spaces)
-#   <branch> git branch to create          (no spaces, e.g. 12-keystroke-capture)
+#   <branch> git branch to create/reuse    (no spaces, e.g. 12-keystroke-capture)
 #   <title>  human title (may contain spaces and ':'), used in commit + prompt
 # Split is on the FIRST TWO colons only, so titles may contain ':'.
 #
-# Per issue: worktree+branch off BASE_BRANCH (or the epic integration branch, when
-# --epic <branch> is passed), run the headless agent ($AGENT_EXEC_CMD) to implement the
-# issue by following .agents/commands/execute-issue.md, then (only on success) commit +
-# push. No GitHub API here. Config from .agents/parallel.config or env.
+# --epic <branch>   optional; also read from the EPIC_BRANCH env var as a fallback. When
+#                    present, children are cut from (and, on --integrate, merged into) this
+#                    epic integration branch instead of BASE_BRANCH. Required by every
+#                    action flag below. Must come first.
+# --review           requires --epic. Fans out the standards-and-spec-review over each
+#                    named child as TWO single-axis reviewer processes (Standards, Spec),
+#                    dispatched concurrently through run-review-agent.sh (ADR-0014) against
+#                    the epic branch, then composes both axis reports into
+#                    .worktrees/<branch>.review.md. Each axis is capped per attempt by
+#                    REVIEW_TIMEOUT (not AGENT_TIMEOUT); an axis that fails, times out, or
+#                    writes nothing fails the child. Reads the same
+#                    .worktrees/<branch>.issue.md the caller wrote before the plain run.
+#                    Builds .worktrees/.corpus-pack.md (verbatim concatenation of the
+#                    standards sources) first and names it in the Standards prompt — plus
+#                    .worktrees/.epic-issue.md, if the caller wrote it, in the Spec prompt.
+# --rework           requires --epic. Reads .worktrees/<branch>.feedback (written by the
+#                    caller), re-dispatches the implementing agent, and on success appends
+#                    a `rework(#<issue>): round <n>` commit to the child's branch. Refuses
+#                    once MAX_REWORK_ROUNDS is reached (round count derived from git; the
+#                    pre-rename spelling "ronda" is still counted).
+# --integrate         requires --epic. Merges each named child into the epic branch
+#                    (serialized via a `.merge.lock` mkdir lock + a dedicated __epic__
+#                    worktree — this script is the epic branch's single writer), deletes
+#                    the child's branch from origin (unless KEEP_CHILD_BRANCHES=1), and is
+#                    the only action that removes the child's worktree on success.
 #
-# Authoritative spec: if $ISSUE_SPEC_DIR/<issue>.md exists (written by /execute-epic from the
-# GitHub issue body), its full text is embedded into that child's prompt — headless children
-# have NO GitHub access, so this is how they receive the complete issue (file lists, code,
-# acceptance criteria), not just the title.
+# A run with NO action flag is a plain run: implement, commit, push each child. It never
+# merges, and it retains the worktree (through the whole review gate) rather than removing
+# it — only --integrate does that. A worktree is also retained on any action's failure, for
+# inspection. Config from .agents/parallel.config or the environment.
 #
-# --epic <branch>  optional; when present, children cut from and auto-merge into this
-#                   branch after their own push succeeds (serialized via a `.merge.lock`
-#                   mkdir lock + a dedicated __epic__ worktree — this script is the
-#                   single writer of the epic branch). A merge conflict is recorded in
-#                   .mergefail (the child branch stays pushed, just not integrated) and
-#                   counts as a failure for this run's exit status.
-#                   On a clean merge the child's branch is deleted from origin (unless
-#                   KEEP_CHILD_BRANCHES=1) — it is fully contained in the epic branch.
+# A plain run and --review both read .worktrees/<branch>.issue.md if the caller wrote it
+# before invoking — neither has GitHub access, so without this file the implementing agent
+# cannot fetch the issue it was asked to build, and the reviewer falls back to the plan
+# file for its Spec axis. The caller is expected to write it once, before the plain run.
 #
-# Outputs: .pushed (issue+branch per pushed child), .failed (issue per agent/push
-# failure), .merged (issue+branch per child merged into the epic branch), .mergefail
-# (issue per child that could not be merged into the epic branch).
-# Exit status = number of FAILED + MERGEFAIL issues (0 = all succeeded and integrated).
+# Outputs (truncated and rebuilt on every invocation, so each reflects only the action
+# just run): .pushed (issue+branch per pushed child, plain run only), .failed (issue per
+# failure in whichever action ran), .merged (issue+branch per child merged into the epic
+# branch, --integrate only), .mergefail (issue per child that could not be merged).
+# Exit status = number of FAILED + MERGEFAIL entries produced by this invocation.
 
 set -u
 
@@ -41,6 +60,7 @@ cd "$PROJECT_ROOT" || { echo "FATAL: cannot cd to project root" >&2; exit 99; }
 AGENT_EXEC_CMD=${AGENT_EXEC_CMD:-"claude -p --dangerously-skip-permissions"}
 PARALLEL_MAX_CONCURRENCY=${PARALLEL_MAX_CONCURRENCY:-3}
 MAX_CHILDREN=${MAX_CHILDREN:-12}
+MAX_REWORK_ROUNDS=${MAX_REWORK_ROUNDS:-2}  # 0 disables rework: a rejection just blocks
 WORKTREES_DIR=${WORKTREES_DIR:-.worktrees}
 BASE_BRANCH=${BASE_BRANCH:-main}
 ACCEPTANCE_CMD=${ACCEPTANCE_CMD:-}        # empty = skip acceptance gate in the runner
@@ -51,15 +71,13 @@ KEEP_CHILD_BRANCHES=${KEEP_CHILD_BRANCHES:-0}  # 1 = keep a child's branch after
 # shellcheck disable=SC1091
 [ -f "$PROJECT_ROOT/.agents/parallel.config" ] && . "$PROJECT_ROOT/.agents/parallel.config"
 
-# Directory of per-issue spec files (one <issue>.md per child), written by /execute-epic
-# before it invokes this runner. When a child's spec file exists, its full text is embedded
-# into that child's headless prompt as the authoritative spec (headless children have no
-# GitHub access). Set after config sourcing so an overridden WORKTREES_DIR is honored.
-ISSUE_SPEC_DIR=${ISSUE_SPEC_DIR:-$WORKTREES_DIR/specs}
+# empty REVIEW_AGENT_EXEC_CMD means "inherit AGENT_EXEC_CMD", never "skip the review" —
+# resolved AFTER sourcing the config so an explicit empty string in the file still inherits.
+REVIEW_AGENT_EXEC_CMD=${REVIEW_AGENT_EXEC_CMD:-$AGENT_EXEC_CMD}
 
 log() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
 
-# ---- optional epic integration branch (enables the auto-merge model) ----
+# ---- optional epic integration branch (required by every action flag) ----
 EPIC_BRANCH=${EPIC_BRANCH:-}
 if [ "${1:-}" = "--epic" ]; then
   [ "$#" -ge 2 ] || { log "FATAL: --epic requires a branch argument"; exit 2; }
@@ -69,9 +87,26 @@ fi
 EPIC_MERGE_FLAGS=${EPIC_MERGE_FLAGS:---no-ff}   # how children merge into the epic branch
 EPIC_WT="$WORKTREES_DIR/__epic__"               # dedicated checkout of the epic branch
 MERGE_LOCK="$WORKTREES_DIR/.merge.lock"         # serialize merge+push (single writer)
+CORPUS_PACK="$WORKTREES_DIR/.corpus-pack.md"    # shared review input — rebuilt per --review (ADR-0008)
+EPIC_ISSUE_FILE="$WORKTREES_DIR/.epic-issue.md" # epic issue body, written by the caller (never by the runner)
+
+# ---- optional action flag: plain run (none) | --review | --rework | --integrate ----
+ACTION=""
+case "${1:-}" in
+  --review) ACTION=review ;;
+  --rework) ACTION=rework ;;
+  --integrate) ACTION=integrate ;;
+esac
+if [ -n "$ACTION" ]; then
+  if [ -z "$EPIC_BRANCH" ]; then
+    log "FATAL: --$ACTION requires --epic <branch> (or the EPIC_BRANCH env var)"
+    exit 2
+  fi
+  shift
+fi
 
 if [ "$#" -eq 0 ]; then
-  log "usage: $0 <issue:branch:title> [<issue:branch:title> ...]"
+  log "usage: $0 [--epic <branch>] [--review|--rework|--integrate] <issue:branch:title> [...]"
   exit 2
 fi
 if [ "$#" -gt "$MAX_CHILDREN" ]; then
@@ -85,6 +120,11 @@ mkdir -p "$WORKTREES_DIR"
 _cli_bin=$(printf '%s\n' "$AGENT_EXEC_CMD" | awk '{print $1}')
 if ! command -v "$_cli_bin" >/dev/null 2>&1; then
   log "FATAL: agent CLI '$_cli_bin' not on PATH (AGENT_EXEC_CMD=$AGENT_EXEC_CMD)."
+  exit 4
+fi
+_review_cli_bin=$(printf '%s\n' "$REVIEW_AGENT_EXEC_CMD" | awk '{print $1}')
+if ! command -v "$_review_cli_bin" >/dev/null 2>&1; then
+  log "FATAL: review agent CLI '$_review_cli_bin' not on PATH (REVIEW_AGENT_EXEC_CMD=$REVIEW_AGENT_EXEC_CMD)."
   exit 4
 fi
 
@@ -127,13 +167,45 @@ ensure_epic_branch() {
   fi
 }
 
-process_issue() {
+# Make sure a child's worktree exists at $WORKTREES_DIR/<branch>, recreating it from the
+# already-pushed branch when it was cleaned up or never fanned out in this invocation.
+# Used by --review and --rework, which run inside the child's own checkout.
+ensure_child_worktree() {
+  _branch=$1
+  _wt="$WORKTREES_DIR/$_branch"
+  _logf="$WORKTREES_DIR/$_branch.log"
+  [ -e "$_wt" ] && return 0
+  if git show-ref --verify --quiet "refs/heads/$_branch"; then
+    git worktree add "$_wt" "$_branch" >>"$_logf" 2>&1 && return 0
+  fi
+  git fetch --quiet origin "$_branch" >>"$_logf" 2>&1
+  git worktree add "$_wt" -b "$_branch" "origin/$_branch" >>"$_logf" 2>&1
+}
+
+# Build the corpus pack: a verbatim, path-separated concatenation of the standards
+# sources, rebuilt from scratch on every --review invocation. Lossless and
+# per-invocation — never a cache, never a digest (ADR-0008). The source list lives in
+# build-corpus-pack.sh, shared with the interactive gate (ADR-0013) so the two review
+# paths cannot drift apart.
+build_corpus_pack() {
+  sh "$PROJECT_ROOT/.agents/scripts/build-corpus-pack.sh" "$CORPUS_PACK"
+}
+
+# ---- plain run: implement, commit, push. Never merges; retains the worktree. ----
+process_plain_run() {
   _issue=$1; _branch=$2; _title=$3
   _wt="$WORKTREES_DIR/$_branch"
   _logf="$WORKTREES_DIR/$_branch.log"
+  _issuef="$PROJECT_ROOT/$WORKTREES_DIR/$_branch.issue.md"
 
   _base_ref=${EPIC_BRANCH:-$BASE_BRANCH}
   log "[#$_issue] start -> $_branch (base $_base_ref)"
+
+  if [ -f "$_issuef" ]; then
+    _issue_note="read the issue body at $_issuef (you have no GitHub access and cannot fetch it yourself)."
+  else
+    _issue_note="no issue body was made available at $_issuef and you have no GitHub access to fetch #$_issue yourself — note the gap in your report instead of guessing at the issue's content."
+  fi
 
   if [ -e "$_wt" ]; then
     git worktree remove --force "$_wt" >/dev/null 2>&1 || rm -rf "$_wt"
@@ -148,46 +220,28 @@ process_issue() {
     echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
   fi
 
-  # Build the authoritative-spec section. Prefer the per-issue spec file that /execute-epic
-  # writes (the full GitHub issue body); fall back to a matching plan file, then the title.
-  _spec_file="$ISSUE_SPEC_DIR/$_issue.md"
-  if [ -s "$_spec_file" ]; then
-    _spec_body=$(cat "$_spec_file")
-    _spec_section="The full text of GitHub issue #$_issue is reproduced below as your
-AUTHORITATIVE specification. Implement exactly what it describes — every file, code snippet,
-package/API name, and acceptance criterion. Do NOT skip its tests, rename its packages, or
-substitute a simpler approach than it specifies.
-
------ BEGIN ISSUE #$_issue -----
-$_spec_body
------ END ISSUE #$_issue -----"
-  else
-    _spec_section="Use the linked plan file in .agents/plans/ whose header contains
-\"> Issue: #$_issue\" as the primary source of truth. You have NO GitHub access, so if no such
-plan file exists, implement from the title above and AGENTS.md as best you can."
-  fi
-
-  # Assemble the prompt via plain double-quoted expansion (NOT an unquoted heredoc) so the
-  # embedded issue body — which contains backticks, '$', and braces — is inserted literally
-  # and never re-evaluated by the shell.
-  _prompt="You are a headless coding agent working inside a git worktree for ONE GitHub issue.
+  _prompt=$(cat <<EOF
+You are a headless coding agent working inside a git worktree for ONE GitHub issue.
 
 Issue: #$_issue — $_title
 
-Follow the procedure in .agents/commands/execute-issue.md (Phase 2 — Execution only;
-there is NO human to confirm, treat Phase 1 as pre-approved).
-
-$_spec_section
+Follow the procedure in .agents/commands/execute-issue.md (Phase 2 — Execution ONLY).
+There is NO human here: treat Phase 1 as pre-approved, and do NOT run Phase 3 — the
+runner performs the review itself, later, under --review. Use the linked plan file
+in .agents/plans/ whose header contains "> Issue: #$_issue" as the primary source of
+truth; if none exists, $_issue_note
 
 Honor AGENTS.md and the relevant .agents/rules/* files. Edit the working tree ONLY.
 Do NOT run git commit, git push, or open a pull request — the runner does that.
-Do NOT use any GitHub tools. When done, stop. Report what you changed."
+Do NOT use any GitHub tools. When done, stop. Report what you changed.
+EOF
+)
 
   (
     cd "$_wt" || exit 91
     # shellcheck disable=SC2086
     run_with_timeout "$AGENT_TIMEOUT" $AGENT_EXEC_CMD "$_prompt"
-  ) >>"$_logf" 2>&1
+  ) >>"$_logf" 2>&1 </dev/null
   _agent_rc=$?
 
   if [ "$_agent_rc" -ne 0 ]; then
@@ -208,7 +262,6 @@ Do NOT use any GitHub tools. When done, stop. Report what you changed."
   git -C "$_wt" add -A >>"$_logf" 2>&1
   git -C "$_wt" commit -m "feat(#$_issue): $_title" \
       -m "Implements #$_issue via /execute-epic parallel runner." \
-      -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>" \
       >>"$_logf" 2>&1
   if [ "$?" -ne 0 ]; then
     log "[#$_issue] FAILED: git commit failed (see $_logf)."
@@ -219,38 +272,293 @@ Do NOT use any GitHub tools. When done, stop. Report what you changed."
     echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
   fi
 
-  log "[#$_issue] OK: pushed $_branch"
+  log "[#$_issue] OK: pushed $_branch (worktree retained for review)"
   echo "$_issue $_branch" >> "$WORKTREES_DIR/.pushed"
+  return 0
+}
 
-  # child branch is pushed and recorded in .pushed above; now integrate it.
-  if [ -n "$EPIC_BRANCH" ]; then
-    acquire_lock
-    git -C "$EPIC_WT" fetch --quiet origin "$EPIC_BRANCH" >>"$_logf" 2>&1
-    git -C "$EPIC_WT" reset --hard "origin/$EPIC_BRANCH" >>"$_logf" 2>&1
+# ---- --review: fan out the agentic review, write .worktrees/<branch>.review.md ----
+process_review() {
+  _issue=$1; _branch=$2; _title=$3
+  _wt="$WORKTREES_DIR/$_branch"
+  _logf="$WORKTREES_DIR/$_branch.log"
+  _reviewf="$WORKTREES_DIR/$_branch.review.md"
+  _issuef="$PROJECT_ROOT/$WORKTREES_DIR/$_branch.issue.md"
+  _packf="$PROJECT_ROOT/$CORPUS_PACK"
+  _epicf="$PROJECT_ROOT/$EPIC_ISSUE_FILE"
+
+  if ! ensure_child_worktree "$_branch"; then
+    log "[#$_issue] FAILED: could not prepare worktree for review (see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+
+  # Resolve the linked plan file to an exact path here, so the Spec prompt names it instead
+  # of sending the reviewer to search — every source arrives by path, already materialized
+  # (the glossary invariant this stage exists to honor).
+  _planf=$(grep -l "^> Issue: #$_issue\$" "$_wt"/.agents/plans/*.md 2>/dev/null | head -1)
+  if [ -n "$_planf" ]; then
+    _plan_note="The linked plan file is at $_planf — it sharpens the intent."
+  else
+    _plan_note="No linked plan file exists for #$_issue."
+  fi
+  if [ -f "$_issuef" ]; then
+    _issue_note="The child issue body is at $_issuef — read it as your primary Spec source. $_plan_note"
+  else
+    _issue_note="No issue body was made available at $_issuef (the runner has no GitHub access). $_plan_note If neither source exists, report \"no spec available\"."
+  fi
+  if [ -f "$_packf" ]; then
+    _pack_note="Your complete standards sources are the corpus pack at $_packf — the verbatim, path-separated concatenation of every standards source. Read that ONE file rather than the raw sources individually."
+  else
+    _pack_note="No corpus pack exists at $_packf — read the raw standards sources as the skill's grounding describes."
+  fi
+  if [ -f "$_epicf" ]; then
+    _epic_note="The epic issue body is at $_epicf — it scopes what this child was supposed to own."
+  else
+    _epic_note="No epic issue body is available (the runner has no GitHub access) — work from the child issue's header lines alone."
+  fi
+
+  # Pre-materialize the child's diff, for the same reason the corpus pack exists: a reviewer
+  # that has to page a large diff through its own tool calls reads less of it, reports more
+  # shallowly, and can burn its whole wall-clock cap without emitting anything. This never
+  # degrades to "run git yourself" — every source arrives by path (glossary invariant), so a
+  # diff that cannot be materialized fails the child instead of sending the reviewer on an
+  # unbounded read. An empty diff fails too: a pushed child with no changes against the epic
+  # branch has nothing to review and something already went wrong upstream.
+  _difff="$PROJECT_ROOT/$WORKTREES_DIR/$_branch.diff"
+  if ! git -C "$_wt" diff "$EPIC_BRANCH...HEAD" > "$_difff" 2>>"$_logf" || [ ! -s "$_difff" ]; then
+    log "[#$_issue] FAILED: could not pre-materialize a non-empty diff against $EPIC_BRANCH (see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+  _diff_note="The exact diff under review is pre-materialized at $_difff — read that file rather than re-running git."
+
+  # One reviewer process per axis, dispatched concurrently through the shared dispatcher
+  # (ADR-0014) — the same mechanism the interactive gate uses, so the two paths cannot
+  # drift. Each process runs inside the child's worktree, is capped per attempt by
+  # REVIEW_TIMEOUT (resolved by the dispatcher, not AGENT_TIMEOUT), and reports one axis
+  # only; this function composes the two reports into the review record.
+  #
+  # Prompts go through files, not $(cat <<EOF): macOS /bin/sh is bash 3.2, whose
+  # command-substitution scanner chokes on unbalanced apostrophes inside a heredoc.
+  _stpromptf="$WORKTREES_DIR/$_branch.review-standards.prompt"
+  _sppromptf="$WORKTREES_DIR/$_branch.review-spec.prompt"
+  cat > "$_stpromptf" <<EOF
+You are the STANDARDS axis of a two-axis review of ONE epic child, running headless
+inside the child's git worktree. You work ALONE: a separate process is running the
+Spec axis. Do NOT dispatch sub-agents, and do NOT report on the Spec axis.
+
+Your brief, the Fowler smell baseline you must apply, and the hard-violation vs
+judgement-call split are in .agents/skills/standards-and-spec-review/SKILL.md — read
+that file and follow its "single-axis invocation" grounding.
+
+Fixed point: $EPIC_BRANCH — an epic child diffs three-dot against the epic integration
+branch, never against main.
+$_diff_note
+$_pack_note
+
+Every source you need is already on disk at the paths above. Do NOT use GitHub tools
+and do NOT go looking for sources you were not given. This is a headless run and must
+never stop to ask — if something cannot be resolved, note it in the report and continue.
+
+Your ENTIRE final message is the Standards report, saved verbatim. Under 400 words.
+Do not begin it with a "## Standards" heading — the runner adds that when composing.
+EOF
+  cat > "$_sppromptf" <<EOF
+You are the SPEC axis of a two-axis review of ONE epic child, running headless inside
+the child's git worktree. You work ALONE: a separate process is running the Standards
+axis. Do NOT dispatch sub-agents, and do NOT report on the Standards axis.
+
+Your brief and the hard-violation vs judgement-call split are in
+.agents/skills/standards-and-spec-review/SKILL.md — read that file and follow its
+"single-axis invocation" grounding.
+
+Fixed point: $EPIC_BRANCH — an epic child diffs three-dot against the epic integration
+branch, never against main.
+$_diff_note
+Child issue: #$_issue — $_title
+$_issue_note
+$_epic_note
+Sibling work named by the child's "> Depends on:" header is legitimately visible in
+the diff base and must not be reported as scope creep. You have NO corpus pack — the
+standards sources belong to the Standards axis, not to you.
+
+Do NOT use GitHub tools and do NOT go looking for sources you were not given. This is
+a headless run and must never stop to ask — if something cannot be resolved, note it
+in the report and continue.
+
+Your ENTIRE final message is the Spec report, saved verbatim. Under 400 words.
+Do not begin it with a "## Spec" heading — the runner adds that when composing.
+EOF
+
+  _stf="$WORKTREES_DIR/$_branch.review-standards.part"
+  _spf="$WORKTREES_DIR/$_branch.review-spec.part"
+  (
+    cd "$_wt" || exit 91
+    sh "$PROJECT_ROOT/.agents/scripts/run-review-agent.sh" "$(cat "$PROJECT_ROOT/$_stpromptf")"
+  ) >"$_stf" 2>>"$_logf" </dev/null &
+  _st_pid=$!
+  (
+    cd "$_wt" || exit 91
+    sh "$PROJECT_ROOT/.agents/scripts/run-review-agent.sh" "$(cat "$PROJECT_ROOT/$_sppromptf")"
+  ) >"$_spf" 2>>"$_logf" </dev/null &
+  _sp_pid=$!
+  wait "$_st_pid"; _st_rc=$?
+  wait "$_sp_pid"; _sp_rc=$?
+  # A reviewer that exits 0 without writing a report did not review anything — treat it
+  # exactly like a failed axis rather than composing an empty section that reads as a pass.
+  [ "$_st_rc" -eq 0 ] && [ ! -s "$_stf" ] && _st_rc=96
+  [ "$_sp_rc" -eq 0 ] && [ ! -s "$_spf" ] && _sp_rc=96
+
+  # Compose the review record — overwrite, never append: under the runner the history
+  # already lives in git and the child log (ADR-0011). A failed or timed-out axis gets an
+  # explicit marker instead of a report, and fails the child: a half-reviewed child must
+  # never pass the gate as if both axes had seen it.
+  axis_section() {
+    if [ "$1" -eq 0 ]; then cat "$2"; return; fi
+    case "$1" in
+      124) printf '**AXIS DID NOT REPORT** — REVIEW_TIMEOUT exceeded. See %s.\n' "$_logf" ;;
+      96)  printf '**AXIS DID NOT REPORT** — reviewer exited 0 but wrote nothing. See %s.\n' "$_logf" ;;
+      *)   printf '**AXIS DID NOT REPORT** — reviewer exited %s. See %s.\n' "$1" "$_logf" ;;
+    esac
+  }
+  {
+    printf '# Review report — #%s %s\n\n' "$_issue" "$_branch"
+    printf '> Fixed point: `%s` (three-dot, committed work)\n' "$EPIC_BRANCH"
+    printf '> Reviewer: `%s`, one process per axis (ADR-0014)\n\n' "$REVIEW_AGENT_EXEC_CMD"
+    printf '## Standards\n\n'
+    axis_section "$_st_rc" "$_stf"
+    printf '\n\n## Spec\n\n'
+    axis_section "$_sp_rc" "$_spf"
+    printf '\n'
+  } > "$_reviewf"
+  rm -f "$_stf" "$_spf" "$_stpromptf" "$_sppromptf"
+
+  if [ "$_st_rc" -ne 0 ] || [ "$_sp_rc" -ne 0 ]; then
+    log "[#$_issue] FAILED: review axis did not report (standards rc=$_st_rc, spec rc=$_sp_rc — 124 means REVIEW_TIMEOUT; see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+
+  log "[#$_issue] OK: review written to $_reviewf"
+  return 0
+}
+
+# ---- --rework: re-dispatch a rejected child with its feedback, append a round commit ----
+process_rework() {
+  _issue=$1; _branch=$2; _title=$3
+  _wt="$WORKTREES_DIR/$_branch"
+  _logf="$WORKTREES_DIR/$_branch.log"
+  _feedbackf="$WORKTREES_DIR/$_branch.feedback"
+
+  if [ ! -f "$_feedbackf" ]; then
+    log "[#$_issue] FAILED: no feedback file at $_feedbackf"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+  if ! ensure_child_worktree "$_branch"; then
+    log "[#$_issue] FAILED: could not prepare worktree for rework (see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+
+  # Two --grep patterns are ORed by git log. The marker was spelled "ronda" before the
+  # artifacts-in-English change; counting both keeps a child mid-rework at its true round.
+  _prior=$(git -C "$_wt" log --oneline \
+      --grep="^rework(#$_issue): round " \
+      --grep="^rework(#$_issue): ronda " 2>/dev/null | grep -c .)
+  _prior=${_prior:-0}
+  if [ "$_prior" -ge "$MAX_REWORK_ROUNDS" ]; then
+    log "[#$_issue] FAILED: rework cap exhausted ($_prior/$MAX_REWORK_ROUNDS rounds run)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+  _round=$((_prior + 1))
+
+  _feedback=$(cat "$_feedbackf")
+  _diff=$(git -C "$_wt" diff "$EPIC_BRANCH...HEAD" 2>/dev/null)
+
+  _prompt=$(cat <<EOF
+You are a headless coding agent reworking a REJECTED epic child — round $_round.
+
+Issue: #$_issue — $_title
+
+This branch was reviewed and rejected. Feedback to address:
+---
+$_feedback
+---
+
+Current diff against the epic branch ($EPIC_BRANCH):
+---
+$_diff
+---
+
+Address every point in the feedback. Honor AGENTS.md and the relevant .agents/rules/*
+files, same as the original implementation. Edit the working tree ONLY. Do NOT run git
+commit, git push, or open a pull request — the runner does that. Do NOT use any GitHub
+tools. When done, stop. Report what you changed.
+EOF
+)
+
+  (
+    cd "$_wt" || exit 91
     # shellcheck disable=SC2086
-    if git -C "$EPIC_WT" merge $EPIC_MERGE_FLAGS "$_branch" \
-         -m "Merge child #$_issue ($_branch) into $EPIC_BRANCH" >>"$_logf" 2>&1 \
-       && git -C "$EPIC_WT" push origin "$EPIC_BRANCH" >>"$_logf" 2>&1; then
-      echo "$_issue $_branch" >> "$WORKTREES_DIR/.merged"
-      log "[#$_issue] OK: merged $_branch into $EPIC_BRANCH"
-      release_lock
-      # child is fully contained in the epic branch now; drop its branch unless asked to keep it.
-      if [ "$KEEP_CHILD_BRANCHES" -ne 1 ]; then
-        if git push origin --delete "$_branch" >>"$_logf" 2>&1; then
-          log "[#$_issue] deleted merged branch $_branch (remote)"
-        else
-          log "[#$_issue] note: could not delete branch $_branch (already gone?) — see $_logf"
-        fi
+    run_with_timeout "$AGENT_TIMEOUT" $AGENT_EXEC_CMD "$_prompt"
+  ) >>"$_logf" 2>&1 </dev/null
+  _agent_rc=$?
+
+  if [ "$_agent_rc" -ne 0 ]; then
+    log "[#$_issue] FAILED: rework agent exited $_agent_rc (see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+  if [ -z "$(git -C "$_wt" status --porcelain)" ]; then
+    log "[#$_issue] FAILED: rework agent made no changes"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+
+  git -C "$_wt" add -A >>"$_logf" 2>&1
+  git -C "$_wt" commit -m "rework(#$_issue): round $_round" \
+      -m "Addresses review feedback for #$_issue." \
+      >>"$_logf" 2>&1
+  if [ "$?" -ne 0 ]; then
+    log "[#$_issue] FAILED: rework commit failed (see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+  if ! git -C "$_wt" push origin "$_branch" >>"$_logf" 2>&1; then
+    log "[#$_issue] FAILED: rework push failed (see $_logf)"
+    echo "$_issue" >> "$WORKTREES_DIR/.failed"; return 1
+  fi
+
+  log "[#$_issue] OK: rework round $_round pushed to $_branch"
+  return 0
+}
+
+# ---- --integrate: merge an approved child into the epic branch, then clean up ----
+process_integrate() {
+  _issue=$1; _branch=$2; _title=$3
+  _wt="$WORKTREES_DIR/$_branch"
+  _logf="$WORKTREES_DIR/$_branch.log"
+
+  acquire_lock
+  git -C "$EPIC_WT" fetch --quiet origin "$EPIC_BRANCH" >>"$_logf" 2>&1
+  git -C "$EPIC_WT" reset --hard "origin/$EPIC_BRANCH" >>"$_logf" 2>&1
+  # shellcheck disable=SC2086
+  if git -C "$EPIC_WT" merge $EPIC_MERGE_FLAGS "$_branch" \
+       -m "Merge child #$_issue ($_branch) into $EPIC_BRANCH" >>"$_logf" 2>&1 \
+     && git -C "$EPIC_WT" push origin "$EPIC_BRANCH" >>"$_logf" 2>&1; then
+    echo "$_issue $_branch" >> "$WORKTREES_DIR/.merged"
+    log "[#$_issue] OK: merged $_branch into $EPIC_BRANCH"
+    release_lock
+    # child is fully contained in the epic branch now; drop its branch unless asked to keep it.
+    if [ "$KEEP_CHILD_BRANCHES" -ne 1 ]; then
+      if git push origin --delete "$_branch" >>"$_logf" 2>&1; then
+        log "[#$_issue] deleted merged branch $_branch (remote)"
+      else
+        log "[#$_issue] note: could not delete branch $_branch (already gone?) — see $_logf"
       fi
-    else
-      git -C "$EPIC_WT" merge --abort >>"$_logf" 2>&1 || true
-      git -C "$EPIC_WT" reset --hard "origin/$EPIC_BRANCH" >>"$_logf" 2>&1 || true
-      echo "$_issue" >> "$WORKTREES_DIR/.mergefail"
-      log "[#$_issue] MERGEFAIL: $_branch did not integrate into $EPIC_BRANCH (see $_logf)"
-      release_lock
-      # branch is pushed and safe; a human resolves the conflict. Treat as this-child failure.
-      return 1
     fi
+  else
+    git -C "$EPIC_WT" merge --abort >>"$_logf" 2>&1 || true
+    git -C "$EPIC_WT" reset --hard "origin/$EPIC_BRANCH" >>"$_logf" 2>&1 || true
+    echo "$_issue" >> "$WORKTREES_DIR/.mergefail"
+    log "[#$_issue] MERGEFAIL: $_branch did not integrate into $EPIC_BRANCH (see $_logf)"
+    release_lock
+    # branch is pushed and safe; a human resolves the conflict. Treat as this-child failure.
+    return 1
   fi
 
   if [ "$KEEP_WORKTREES" -ne 1 ]; then
@@ -259,12 +567,20 @@ Do NOT use any GitHub tools. When done, stop. Report what you changed."
   return 0
 }
 
+case "$ACTION" in
+  "") _handler=process_plain_run ;;
+  review) _handler=process_review ;;
+  rework) _handler=process_rework ;;
+  integrate) _handler=process_integrate ;;
+esac
+
 # ---- concurrency: job-slot loop, dash-safe (no `wait -n`) ----
 : > "$WORKTREES_DIR/.failed"
 : > "$WORKTREES_DIR/.pushed"
 : > "$WORKTREES_DIR/.merged"
 : > "$WORKTREES_DIR/.mergefail"
 ensure_epic_branch
+if [ "$ACTION" = "review" ]; then build_corpus_pack; fi
 running_pids=""
 running_count=0
 
@@ -283,7 +599,7 @@ for _rec in "$@"; do
     log "skip malformed record: '$_rec'"; continue
   fi
   while [ "$running_count" -ge "$PARALLEL_MAX_CONCURRENCY" ]; do drain_one; done
-  process_issue "$_issue" "$_branch" "$_title" &
+  "$_handler" "$_issue" "$_branch" "$_title" &
   running_pids="$running_pids $!"
   running_pids=$(printf '%s' "$running_pids" | sed 's/^ *//')
   running_count=$((running_count + 1))
@@ -298,6 +614,6 @@ total_fail=$((failed + mergefail))
 if [ -n "$EPIC_BRANCH" ] && [ "$KEEP_WORKTREES" -ne 1 ]; then
   git worktree remove --force "$EPIC_WT" >/dev/null 2>&1 || rm -rf "$EPIC_WT"
 fi
-log "wave complete: $pushed pushed, $merged merged, $failed failed, $mergefail merge-conflict."
+log "wave complete [${ACTION:-run}]: $pushed pushed, $merged merged, $failed failed, $mergefail merge-conflict."
 [ "$total_fail" -gt 0 ] && log "not integrated: $(tr '\n' ' ' < "$WORKTREES_DIR/.failed") $(tr '\n' ' ' < "$WORKTREES_DIR/.mergefail")"
 exit "$total_fail"

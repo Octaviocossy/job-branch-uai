@@ -1,146 +1,153 @@
 # Ubiquitous Language
 
-> Single source of truth for domain terminology. Update when entities, relationships,
-> or naming conventions change. AI tools should read this before inspecting source files.
+> Single source of truth for current domain and technical terminology.
+> Read this before changing canonical types, states, processes, or data contracts.
 >
-> **Last updated**: 2026-07-13 (added **Persona**/`PersonaRecruiter`/`Postulante`, `personas` table, and `cv_versions.snapshot_vacante_id` — foundation slice of Epic #18)
-> **Canonical types**: `packages/models/src/schemas/`
-> **Persistence layer**: `apps/api/src/database/schema/` (Drizzle table definitions mirroring `@repo/models` shapes)
->
-> Domain source: the academic deliverable (Parcial N2, Ingeniería de Software, UAI) — its domain
-> model (§6) and state machines (§7). Spanish terms below are that deliverable's own vocabulary
-> (`Usuario`, `RamaAplicacion`, `VersionPerfil`, …); the canonical Zod/Drizzle identifiers are
-> English (`user`, `application`, `cvVersion`, …) except where a field name is kept in Spanish to
-> match the source literally (e.g. `esPerfilSalida`, `fechaVencimiento`).
+> **Last updated:** 2026-10-12
+> **Canonical code:** `packages/models/src/schemas/` (Zod types), `apps/api/src/database/schema/` (Drizzle tables), `apps/api/src/modules/*/domain/` (domain classes, events, errors)
+> **Budget:** notes 600 · warn 81920 · fail 102400 (bytes)
+
+This file holds **this project's own domain vocabulary** and is **owned by the project**. It is
+one of six (ADR-0016, ADR-0017, ADR-0021):
+
+| File | Holds | Owner |
+|------|-------|-------|
+| `.agents/ubiquitous-language.md` | this project's domain vocabulary | the project |
+| `.agents/ubiquitous-language-scaffold.md` | the harness's own vocabulary | the scaffold |
+| `.agents/ubiquitous-language-invariants.md` | this project's product invariants and relationships | the project |
+| `.agents/ubiquitous-language-invariants-scaffold.md` | the harness's own invariants (`S1`, `S2`, …) | the scaffold |
+| `.agents/ubiquitous-language-index.md` | generated term → area pointer table | generated |
+| `.agents/ubiquitous-language-changelog.md` | dated history of the family | both |
+
+`CLAUDE.md` `@`-imports the index, both invariants files and this file; the scaffold vocabulary
+is read on demand.
+
+Domain source: the academic deliverable (Parcial N2, Ingeniería de Software, UAI) — its domain
+model (§6) and state machines (§7). Its Spanish names (`Usuario`, `RamaAplicacion`,
+`VersionPerfil`, …) are recorded below as *SPEC* names. Canonical Zod/Drizzle identifiers are
+English (`user`, `application`, `cvVersion`, …) except where the source's Spanish is kept
+literally (`Vacante`, `Hito`, `esPerfilSalida`, `fechaVencimiento`, …).
 
 ---
 
 ## How to maintain this document
 
-1. **Add terms** when a new entity, state, or process enters the codebase.
-2. **Add aliases to avoid** when ambiguity appears in PRs, chats, or AI-generated code.
-3. **Update relationships** when entity connections change (new FK, removed link, etc.).
-4. **Flag ambiguities** when a term means different things in different contexts.
-5. **Bump "Last updated"** on every edit so AI tools know how fresh the context is.
+1. Describe current behavior, not release history or superseded implementations.
+2. Add only terminology that clarifies naming, ownership, a data contract, or an invariant.
+3. Keep definitions concise and use aliases to prevent recurring ambiguity.
+4. Relationships and business-rule guards are invariants: they live in
+   `.agents/ubiquitous-language-invariants.md`, cited here by number.
+5. Update the date and the changelog (`.agents/ubiquitous-language-changelog.md`) when canonical
+   vocabulary or an invariant changes, then regenerate the index.
 
 ---
 
-## Core entities
+## Glossary
 
-| Term (SPEC) | Definition | Canonical Zod type | Drizzle table |
-|------|-----------|----------------|-----------------|
-| **User** (`Usuario`) | Account holder shared by the NestJS API and React client — a `Postulante` or a `Recruiter` (role chosen at registration, immutable per BR-3). Validated via a shared Zod schema; `passwordHash` is persisted but **never** exposed in a `@repo/models` type. | `User` (`userSchema`) in `packages/models/src/schemas/user.schema.ts` | `users` in `apps/api/src/database/schema/users.schema.ts` (`id`, `email` unique, `display_name`, `role`, `password_hash` nullable, `auth_provider` default `native`, `intentos_fallidos` default `0`) |
-| **Persona** | The role-specific profile that **composes** a `User` via `usuarioId` (association, not inheritance — matches the domain diagram). Split into two subtypes by a `tipo` discriminant, modeled as a Zod discriminated union: `PersonaRecruiter` (`perNombre`, `perApellido`, `fechaContratacion`) and `Postulante` (`habilidadesMaster`). Created alongside the `User` at registration — behavior lands in issue #21; this slice is schema/table only. | `Persona` / `PersonaRecruiter` / `Postulante` / `CreatePersonaInput` (`personaSchema`, `personaRecruiterSchema`, `postulanteSchema`, `createPersonaSchema`, discriminated on `personaTipoSchema`) in `packages/models/src/schemas/persona.schema.ts` | `personas` in `apps/api/src/database/schema/personas.schema.ts` — single-table-with-discriminator (`usuario_id` FK → `users`, unique; `tipo`; nullable recruiter-only columns `per_nombre`/`per_apellido`/`fecha_contratacion`; `habilidades_master text[]` for postulante) |
-| **Auth payloads** | Registration/login/session-issuance request-response shapes (RF14). Not a persisted entity — `registerSchema`/`loginSchema` validate input; `authResponseSchema` shapes the JWT + `User` response; `meResponseSchema` shapes `GET /auth/me`'s `{ user: User, permisos: string[] }` response (the sidebar's current-user source — never includes `passwordHash`). | `RegisterInput`, `LoginInput`, `AuthResponse`, `MeResponse` (`registerSchema`, `loginSchema`, `authResponseSchema`, `meResponseSchema`) in `packages/models/src/schemas/auth.schema.ts` | — (writes to `users.password_hash` / `users.role`) |
-| **CvVersion** (`VersionPerfil`) | A labeled, versioned career profile a Postulante can attach a CV/cover-letter file to. Exactly one version per user may be the **Output Profile** (`esPerfilSalida`, BR-5). `archivoCv` is a Postgres `bytea` blob (≤ 10 MB, BR-6). Carries a nullable `snapshotVacanteId` — the `VersionPerfil → Vacante` snapshot reference (populated by the apply/snapshot path, issue #22; existing rows and the borrador-creation flow have no vacante, so it must be optional). | `CvVersion` / `CreateCvVersionInput` (`cvVersionSchema`) in `packages/models/src/schemas/cv-version.schema.ts`; `CreateCvVersionRequest` (`createCvVersionRequestSchema`, client-facing `{ name, focus, tags? }` — the `cv-versions` module's `POST /cv-versions` body; server derives `estado`/`esPerfilSalida`/tags-inheritance, BR-7) in the same file | `cv_versions` in `apps/api/src/database/schema/cv-versions.schema.ts` (`usuario_id` FK → `users`, `name`, `focus`, `tags text[]`, `es_perfil_salida`, `estado`, `archivo_cv bytea`, `tamanio_bytes`, `created_at`, `snapshot_vacante_id` nullable FK → `vacantes`) |
-| **Application** (`RamaAplicacion` / "rama" / "branch") | One selection process/pipeline instance: links a `User` to a `Vacante` via the `CvVersion` snapshot used at apply-time (VersionPerfil reference lives on the branch, per professor feedback). Tracks a `timeline` of `Hito` entries. | `Application` / `CreateApplicationInput` (`applicationSchema`) + `applicationStatusSchema` / `PIPELINE_STAGES` in `packages/models/src/schemas/application.schema.ts` (status enum + pipeline order are defined in `hito.schema.ts` to avoid a circular import, and re-used here) | `applications` in `apps/api/src/database/schema/applications.schema.ts` (`usuario_id`, `vacante_id`, `cv_version_id` FKs, `status`, `applied_date`, `last_updated`, `recruiter_*` columns, `tech_stack text[]`, `notes`, `salary`, `location`, `source`, `archived`) |
-| **Vacante** | A job posting a `User` applies to, owned by an `Empresa`. | `Vacante` / `CreateVacanteInput` (`vacanteSchema`) in `packages/models/src/schemas/vacante.schema.ts` | `vacantes` in `apps/api/src/database/schema/vacantes.schema.ts` (`empresa_id` FK, `titulo`, `descripcion`, `tecnologias_requeridas text[]`, `rango_salarial`) |
-| **Empresa** | The company behind a `Vacante`. | `Empresa` / `CreateEmpresaInput` (`empresaSchema`) in `packages/models/src/schemas/empresa.schema.ts` | `empresas` in `apps/api/src/database/schema/empresas.schema.ts` (`nombre`, `industria`, `sitio_web`, `reputacion_time_response`) |
-| **Hito** (`HitoProceso` / `TimelineEvent`) | One milestone/state-change event in an `Application`'s timeline. Carries the `ApplicationStatus` at that point plus optional follow-up metadata. Generates 0..1 `Feedback` and 0..* `Recordatorio`. | `Hito` / `CreateHitoInput` (`hitoSchema`) in `packages/models/src/schemas/hito.schema.ts` | `hitos` in `apps/api/src/database/schema/hitos.schema.ts` (`rama_id` FK → `applications`, `date`, `status`, `note`, `days_in_stage`, `tipo`, `fecha_recordatorio_follow_up`, `observaciones`) |
-| **Feedback** (`FeedbackPostMortem`) | Qualitative post-interview data attached to a `Hito` (RF04). | `Feedback` / `CreateFeedbackInput` (`feedbackSchema`) in `packages/models/src/schemas/feedback.schema.ts` | `feedback` in `apps/api/src/database/schema/feedback.schema.ts` (`hito_id` FK → `hitos`, `fecha_entrevista`, `tipo_entrevista`, `score_tecnico`, `score_cultura`, `comentarios`, `habilidades_faltantes text[]`) |
-| **Recordatorio** | An anti-ghosting follow-up reminder tied to an `Application` (RF05/RF13). | `Recordatorio` / `CreateRecordatorioInput` (`recordatorioSchema`) in `packages/models/src/schemas/recordatorio.schema.ts` | `recordatorios` in `apps/api/src/database/schema/recordatorios.schema.ts` (`rama_id` FK → `applications`, `fecha_vencimiento`, `dias_inactividad`, `estado` default `pendiente`) |
-| **Metrics** (`RendimientoPerfil` / `EstadisticaUsuario`) | Read-only analytics response shapes (RF06/RF10/RF11) computed from the entities above — never persisted directly. Includes per-technology **source distribution** (`SourceDistribution`) and the bundled **analytics overview** (`AnalyticsOverview`) the `apps/api` `analytics` module returns from `GET /analytics/overview` and `apps/web`'s "Analítica" screen renders. | `ProfileRoi`, `Conversion`, `TechHeatmap`, `SkillGap`, `UserStats`, `SourceDistribution`, `AnalyticsOverview` (`profileRoiSchema`, `conversionSchema`, `techHeatmapSchema`, `skillGapSchema`, `userStatsSchema`, `sourceDistributionSchema`, `analyticsOverviewSchema`) in `packages/models/src/schemas/metrics.schema.ts` | — (computed by the `analytics` module's read use-cases (`apps/api/src/modules/analytics/`) over `applications`/`cv_versions`/`hitos`, via its own `AnalyticsReadRepository` — no dependency on the branches module) |
-| **FollowupItem** | Read-only anti-ghosting row (RF05/RF12/RF13) for one active `Application`: `daysSince` the last update plus an `urgency` (`ok`/`warn`/`critical`, from configurable `FollowupThresholds`) and the branch's recruiter contact — never persisted directly. Backed by `Recordatorio` rows for "mark as followed up" persistence (`GenerateRemindersUseCase`/`MarkFollowupDoneUseCase` in `apps/api/src/modules/followup/`). | `FollowupItem`, `FollowupThresholds`, `FollowupSummary`, `FollowupListResponse` (`followupItemSchema`, `followupThresholdsSchema`, `followupSummarySchema`, `followupListResponseSchema`, `listFollowupsQuerySchema`) in `packages/models/src/schemas/followup.schema.ts` | — (computed by the `followup` module's own read repository over `applications`/`vacantes`/`empresas`, refreshing `recordatorios`) |
-| **ComponentePermiso** / **GrupoPermisos** / **Accion** / **ContextoSeguridad** | The RF15/CU15 hierarchical permission matrix, built with the **Composite** pattern: abstract `ComponentePermiso` (`evaluar(codigoAccion)`, `agregarHijo`, `obtenerHijos`); `GrupoPermisos` composite node (`evaluar` = OR of its children, recursive traversal); `Accion` leaf node (`codigoAccion`, `evaluar` = exact match). `ContextoSeguridad` wraps a role's Composite root (`cargarMatriz`, `tienePermiso`, `listarAcciones`) — SPEC's `Persona.resolverPermisos()`. The tree is built **in-memory per role** by the **Factory** pattern: `MatrizPermisosFactory` interface + `PostulanteMatrizFactory`/`RecruiterMatrizFactory` concretes, selected via `resolverFactory(role)` (Abstract Factory). `ResolverPermisosUseCase` wires factory → `ContextoSeguridad`; `@RequiereAccion('codigo')` + `PermissionsGuard` enforce it per request (BR-4), applied to `GET /security/matrix` and `GET /auth/me`. No DB-backed `PermisosJerarquia`/`PersonaPermisos` tables yet — a documented follow-up. Two additional Composite node kinds sit above `Accion` in the tree — `Formulario` (a form-level grouping) and `Modulo` (a module-level grouping), i.e. `Accion → Formulario → Modulo` — in-memory only, same as the rest of the tree; behavior lands in issue #20 (pre-documented here on its behalf per issue #19). | `PermissionMatrix` (`permissionMatrixSchema`, response `{ role, acciones }`) in `packages/models/src/schemas/permiso.schema.ts`; classes in `apps/api/src/modules/security/domain/` (`componente-permiso.ts`, `grupo-permisos.ts`, `accion.ts`, `contexto-seguridad.ts`) and `apps/api/src/modules/security/application/factories/matriz-permisos.factory.ts` | — (in-memory only for v1, no persistence) |
+### Identity and access
 
-**Aliases to avoid:** "Rama" alone (ambiguous with `ListaRamas`/`RamaAplicacion` in SPEC prose) — use `Application`/`applications` in code. "Perfil" alone — use `CvVersion`/`cv_versions` (SPEC's `VersionPerfil`). Do not introduce a `passwordHash` field on any `@repo/models` type that isn't `auth.schema.ts`'s internal DB-adjacent shape — `User` never carries it. Bare `recruiterSchema`/`Recruiter` is ambiguous across schema files — `application.schema.ts` already owns those names for the Application's embedded recruiter-**contact** view-model (`{ name, linkedin?, email? }`); the Persona subtype in `persona.schema.ts` uses `personaRecruiterSchema`/`PersonaRecruiter` instead so the `@repo/models` barrel (`export *`) has no ambiguous re-export.
+Who uses the system and in which role. Authentication lives in the `apps/api` `auth` module; the
+role profile in `persona`.
 
----
+| Term | Canonical type | Aliases to avoid | Notes |
+|------|----------------|------------------|-------|
+| User | `User` (`userSchema`, `user.schema.ts`); table `users` | *Usuario* as a code identifier | SPEC `Usuario`. The account holder shared by `apps/api` and `apps/web`. Its `role` (`postulante` or `recruiter`) is fixed at registration (invariant 2), and it never carries `passwordHash` (invariant 3). |
+| Persona | `Persona`, discriminated on `tipo` (`persona.schema.ts`); table `personas`; domain class `Persona` (`modules/persona/domain/persona.ts`) | *User subtype* | The role-specific profile that **composes** a User through `usuarioId` — association, not inheritance — one per User (unique `usuario_id`). Both subtypes share one table with a discriminator. Created together with the User by `RegisterUseCase`. |
+| PersonaRecruiter | `PersonaRecruiter` (`personaRecruiterSchema`, `persona.schema.ts`); domain class `Recruiter` | bare `Recruiter` / `recruiterSchema` for this subtype in `@repo/models` | The recruiter subtype of Persona (`perNombre`, `perApellido`, `fechaContratacion`). In `@repo/models` the bare `Recruiter` name belongs to the Recruiter contact, so the barrel (`export *`) never re-exports an ambiguous name. |
+| Postulante | `Postulante` (`postulanteSchema`, `persona.schema.ts`); domain class `Postulante` | — | The job-seeker subtype of Persona, carrying `habilidadesMaster`. The role that owns CvVersions and Applications (invariant 1). |
+| Auth payloads | `RegisterInput`, `LoginInput`, `AuthResponse`, `MeResponse` (`auth.schema.ts`) | — | Request/response shapes of registration, login and session issuance (RF14); not persisted. `MeResponse` is `GET /auth/me`'s `{ user, permisos }`, the web sidebar's current-user source. |
 
-## Frontend view-model note
+### Permission matrix
 
-`apps/web` has no separate frontend-only type layer for these entities: it imports the same
-`@repo/models` Zod-inferred types (`Application`, `CvVersion`, `Hito`, …) as its view-models,
-re-exported through `apps/web/models/index.ts` (`export * from "@repo/models"`). The frontend
-view-model shapes (`ApplicationStatus`, `TimelineEvent`, `Recruiter`, `Application`,
-`CvVersion`, `PIPELINE_STAGES`) live solely in `@repo/models` (`application.schema.ts` /
-`hito.schema.ts`); the wave-3 frontend slices (#9) consume the shared schema rather than
-re-declaring these shapes.
+The RF15/CU15 hierarchical permission matrix in `apps/api/src/modules/security/`: a **Composite**
+tree per role, built by a **Factory** — the project's two mandatory design patterns. Built in
+memory per role; there are no permission tables yet (`PermisosJerarquia`/`PersonaPermisos` are a
+documented follow-up).
 
----
+| Term | Canonical type | Aliases to avoid | Notes |
+|------|----------------|------------------|-------|
+| ComponentePermiso | abstract class (`domain/componente-permiso.ts`) | — | The Composite component: `evaluar(codigoAccion)`, `agregarHijo`, `obtenerHijos`. Every node of a role's tree is one. |
+| GrupoPermisos | composite class (`domain/grupo-permisos.ts`) | — | A node whose `evaluar` is the OR of its children, by recursive traversal. A role's root is one; Modulo and Formulario are its named kinds. |
+| Modulo | `Modulo extends GrupoPermisos` (`domain/modulo.ts`) | — | Module-level grouping directly under a role's root, holding that module's Formulario. The tree reads root → Modulo → Formulario → Accion. |
+| Formulario | `Formulario extends GrupoPermisos` (`domain/formulario.ts`) | — | Form-level grouping of Accion leaves, under a Modulo. |
+| Accion | leaf class (`domain/accion.ts`) | — | One permitted action, identified by `codigoAccion` (e.g. `branch.create`); `evaluar` is an exact match. These codes are what `@RequiereAccion` names (invariant 10). |
+| ContextoSeguridad | class (`domain/contexto-seguridad.ts`) | — | Wraps one role's tree: `cargarMatriz`, `tienePermiso`, `listarAcciones`. SPEC's `Persona.resolverPermisos()`. |
+| MatrizPermisosFactory | interface + `PostulanteMatrizFactory`, `RecruiterMatrizFactory` (`application/factories/matriz-permisos.factory.ts`) | — | Builds a role's tree (Abstract Factory). `resolverFactory(role)` picks the concrete factory; `ResolverPermisosUseCase` wires its tree into a ContextoSeguridad. |
+| PermissionMatrix | `PermissionMatrix` (`permissionMatrixSchema`, `permiso.schema.ts`) | — | The `{ role, acciones }` response of `GET /security/matrix`. |
 
-## Relationships
+### Job search
 
-- `Empresa` **1 --- 0..\*** `Vacante`
-- `Vacante` **1 --- 0..\*** `Application`
-- `User` (Postulante) **1 --- 0..\*** `CvVersion`
-- `User` (Postulante) **1 --- 0..\*** `Application`
-- `CvVersion` **1 --- 0..\*** `Application` (snapshot of the version used at apply-time)
-- `Application` **1 --- 1..\*** `Hito` (`timeline`)
-- `Hito` **1 --- 0..1** `Feedback`
-- `Application` **1 --- 0..\*** `Recordatorio`
+The selection-process model: companies, postings, a Postulante's CV versions and the
+applications that track each process.
+
+| Term | Canonical type | Aliases to avoid | Notes |
+|------|----------------|------------------|-------|
+| Empresa | `Empresa` (`empresaSchema`, `empresa.schema.ts`); table `empresas` | — | The company behind a Vacante. |
+| Vacante | `Vacante` (`vacanteSchema`, `vacante.schema.ts`); table `vacantes` | — | A job posting, owned by an Empresa, that Applications apply to. |
+| CvVersion | `CvVersion` (`cvVersionSchema`, `cv-version.schema.ts`); table `cv_versions`; API module `cv-versions` | *Perfil* alone; *VersionPerfil* as a code identifier | SPEC `VersionPerfil`. A labeled, versioned career profile of a Postulante, whose CV or cover-letter file is stored in `archivoCv` (`bytea`). `estado` follows the CvVersion lifecycle below. Nullable `snapshotVacanteId` names the Vacante it was snapshotted for, set by `PATCH /cv-versions/:id/snapshot-vacante`. |
+| Output Profile | `esPerfilSalida` on CvVersion, with `estado` `seleccionado_salida` | — | The CvVersion a Postulante currently presents, set by `POST /cv-versions/:id/output` ("Establecer como Activo Principal"). Only a `disponible` or `seleccionado_salida` version can become one; at most one per Postulante (invariant 4). |
+| CreateCvVersionRequest | `CreateCvVersionRequest` (`createCvVersionRequestSchema`, `cv-version.schema.ts`) | `CreateCvVersionInput` for the request body | The client-facing `POST /cv-versions` body, `{ name, focus, tags? }`; the server derives `estado`, `esPerfilSalida` and tag inheritance (BR-7). `CreateCvVersionInput` is the full persistence input. |
+| Application | `Application` (`applicationSchema`, `application.schema.ts`); table `applications`; API module `branches` | *rama* alone; *RamaAplicacion* as a code identifier | SPEC `RamaAplicacion`. One selection process: a Postulante's application to a Vacante through the CvVersion used at apply time, tracked as a `timeline` of Hitos. The API calls it a *branch* (`/branches`, `branch.archived`). |
+| ApplicationStatus | `applicationStatusSchema` (defined in `hito.schema.ts`, re-used by `application.schema.ts`) | — | `Enviado`, `Entrevista Técnica`, `RRHH`, `Oferta`, `Rechazado`, `Archivado` — defined beside Hito to avoid a circular import. `Oferta`, `Rechazado` and `Archivado` are terminal (`TERMINAL_STATUSES`, `modules/branches/domain/terminal-statuses.ts`). |
+| PIPELINE_STAGES | constant (`hito.schema.ts`) | *transition order* | The kanban column order: `Enviado`, `RRHH`, `Entrevista Técnica`, `Oferta`, `Rechazado` — no `Archivado`. A display order, not an enforced transition sequence (see Flagged ambiguities). |
+| Recruiter contact | `Recruiter` (`recruiterSchema`, `application.schema.ts`) | *PersonaRecruiter* | The recruiter's contact details embedded in an Application — `{ name, linkedin?, email? }`, persisted as `applications.recruiter_*`. Not a registered User. |
+| Hito | `Hito` (`hitoSchema`, `hito.schema.ts`); table `hitos` | *HitoProceso* as a code identifier | SPEC `HitoProceso`. One milestone in an Application's `timeline`: the ApplicationStatus at that point plus optional follow-up metadata. Appended by `AddHitoUseCase`. |
+| Feedback | `Feedback` (`feedbackSchema`, `feedback.schema.ts`); table `feedback` | *FeedbackPostMortem* as a code identifier | SPEC `FeedbackPostMortem`. Qualitative post-interview data attached to a Hito (RF04). |
+| Recordatorio | `Recordatorio` (`recordatorioSchema`, `recordatorio.schema.ts`); table `recordatorios` | — | An anti-ghosting follow-up reminder on an Application (RF05/RF13); `estado` starts `pendiente`. |
+
+### Read models
+
+Shapes computed on read and never persisted directly.
+
+| Term | Canonical type | Aliases to avoid | Notes |
+|------|----------------|------------------|-------|
+| Metrics | `ProfileRoi`, `Conversion`, `TechHeatmap`, `SkillGap`, `UserStats`, `SourceDistribution`, `AnalyticsOverview` (`metrics.schema.ts`) | *RendimientoPerfil*, *EstadisticaUsuario* as code identifiers | SPEC `RendimientoPerfil` / `EstadisticaUsuario`. Analytics shapes (RF06/RF10/RF11) computed by the `analytics` module through its own `AnalyticsReadRepository`, independent of `branches`. `AnalyticsOverview` is the `GET /analytics/overview` bundle the web "Analítica" screen renders. |
+| FollowupItem | `FollowupItem`, `FollowupThresholds`, `FollowupSummary`, `FollowupListResponse` (`followup.schema.ts`) | — | One active Application's anti-ghosting row (RF05/RF12/RF13): `daysSince` its last update and an `urgency` (`ok`, `warn`, `critical`) from configurable `FollowupThresholds`, plus the Recruiter contact. "Mark as followed up" persists through Recordatorio rows. |
+
+### Domain events
+
+In-process events over NestJS `EventEmitter2` (`@nestjs/event-emitter`); each event constant and
+its payload type live under the emitting module's `domain/events/`.
+
+| Term | Canonical type | Aliases to avoid | Notes |
+|------|----------------|------------------|-------|
+| user.created | `USER_CREATED_EVENT`, payload `{ user: User }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `CreateUserUseCase` after a User is persisted; consumed by `UserCreatedListener`. |
+| hito.created | `HITO_CREATED_EVENT`, payload `{ branchId, hito }` (`modules/branches/domain/events/hito-created.event.ts`) | — | Emitted by `AddHitoUseCase` after a Hito is appended. `HitoCreatedListener` only logs today — the hook for future Recordatorio scheduling. |
+| branch.archived | `BRANCH_ARCHIVED_EVENT`, payload `{ branch: Application }` (`modules/branches/domain/events/branch-archived.event.ts`) | — | Emitted by `ArchiveBranchUseCase` after an Application is archived. `BranchArchivedListener` only logs today — the hook for future analytics-cache invalidation. |
 
 ---
 
 ## State machines
 
-### CvVersion.`estado` lifecycle
+### CvVersion `estado` (`cvVersionEstadoSchema`)
 
 ```
-[*] → borrador → (upload PDF/DOCX + save) → disponible
-disponible ⇄ seleccionado_salida   ("Establecer como Activo Principal" — demotes any current one, BR-5)
-disponible | seleccionado_salida → archivado   (archive outdated/deprecated version)
-archivado → disponible   (unarchive)
+[*] → borrador → (file attached + saved) → disponible
+disponible ⇄ seleccionado_salida      (Output Profile; demotes the current one)
+disponible | seleccionado_salida → archivado
+archivado → disponible                 (unarchive)
 ```
 
-- Guard: cannot leave `borrador` without an attached file (BR-9).
-- Guard: at most one `seleccionado_salida` version per user at a time (BR-5).
-- `archivado` cannot be used for new `Application`s, but retains its ROI history (BR-10).
-- Enum: `cvVersionEstadoSchema` = `["borrador", "disponible", "seleccionado_salida", "archivado"]`.
+Guards: invariants 4–7.
 
-### Application.`status` lifecycle
+### Application `status` (`applicationStatusSchema`)
 
 ```
 Enviado → Entrevista Técnica → RRHH → Oferta | Rechazado
 ```
 
-- Each transition is recorded as a `Hito` in the `Application`'s `timeline`.
-- `Oferta` and `Rechazado` are terminal states that allow archiving (`Archivado`, RF09).
-- Enum: `applicationStatusSchema` = `["Enviado", "Entrevista Técnica", "RRHH", "Oferta", "Rechazado", "Archivado"]`, defined in `hito.schema.ts`.
-- `PIPELINE_STAGES` (kanban column order, excludes the terminal `Archivado` stage) = `["Enviado", "RRHH", "Entrevista Técnica", "Oferta", "Rechazado"]`, defined in `hito.schema.ts`; see Flagged ambiguities below.
-- `AddHitoUseCase` (`apps/api/src/modules/branches/application/use-cases/add-hito.use-case.ts`) enforces two guards — a branch already in a `TERMINAL_STATUSES` status (`Oferta`/`Rechazado`/`Archivado`, `apps/api/src/modules/branches/domain/terminal-statuses.ts`) cannot receive another hito, and a hito cannot set `status` to `Archivado` directly (use `POST /branches/:id/archive` instead). Both raise `InvalidStatusTransitionError` (`apps/api/src/modules/branches/domain/errors/invalid-status-transition.error.ts`), mapped to `400` by `BranchesController`. This does **not** enforce stage *order* — see Flagged ambiguities below.
-
----
-
-## Domain events
-
-| Term | Definition | Payload | Transport |
-|------|-----------|---------|-----------|
-| **user.created** | Emitted by `CreateUserUseCase` (`apps/api/src/modules/users/application/use-cases/create-user.use-case.ts`) after a **User** is persisted. Consumed by `UserCreatedListener` (`apps/api/src/modules/users/application/listeners/user-created.listener.ts`). | `{ user: User }` — see `USER_CREATED_EVENT` in `apps/api/src/modules/users/domain/events/user-created.event.ts` | In-process, via NestJS `EventEmitter2` (`@nestjs/event-emitter`) |
-| **hito.created** | Emitted by `AddHitoUseCase` (`apps/api/src/modules/branches/application/use-cases/add-hito.use-case.ts`) after a **Hito** is appended to an **Application**'s `timeline`. Consumed by `HitoCreatedListener` (`apps/api/src/modules/branches/application/listeners/hito-created.listener.ts`) — currently a no-op/log placeholder for the future `Recordatorio` follow-up scheduling hook. | `{ branchId: string; hito: Hito }` — see `HITO_CREATED_EVENT` in `apps/api/src/modules/branches/domain/events/hito-created.event.ts` | In-process, via NestJS `EventEmitter2` (`@nestjs/event-emitter`) |
-| **branch.archived** | Emitted by `ArchiveBranchUseCase` (`apps/api/src/modules/branches/application/use-cases/archive-branch.use-case.ts`) after an **Application** is set to `archived: true` / `status: "Archivado"`. Consumed by `BranchArchivedListener` (`apps/api/src/modules/branches/application/listeners/branch-archived.listener.ts`) — currently a no-op/log placeholder for future analytics-cache invalidation. | `{ branch: Application }` — see `BRANCH_ARCHIVED_EVENT` in `apps/api/src/modules/branches/domain/events/branch-archived.event.ts` | In-process, via NestJS `EventEmitter2` (`@nestjs/event-emitter`) |
+Each transition is recorded as a Hito (invariant 8). `Oferta` and `Rechazado` are terminal and
+allow archiving (`Archivado`, RF09); the terminal-status guards are invariant 9. Stage *order*
+is not enforced — see Flagged ambiguities.
 
 ---
 
 ## Flagged ambiguities
 
 - **`PIPELINE_STAGES` order vs. the documented lifecycle.** The domain lifecycle describes the
-  Application flow textually as `Enviado → Entrevista Técnica → RRHH → Oferta | Rechazo`, but the
-  kanban column order (`PIPELINE_STAGES` in `hito.schema.ts`) is
-  `Enviado → RRHH → Entrevista Técnica → Oferta → Rechazado`. Real seeded applications also move
-  through stages in either order in practice (see `apps/api/src/database/seed.ts`). Treat
-  `PIPELINE_STAGES` as a **display/board-column order**, not a strict enforced transition
-  sequence — no state-machine guard rejects an `Enviado → Entrevista Técnica` jump today.
-
----
-
-## Changelog
-
-| Date | Change | Reason |
-|------|--------|--------|
-| [YYYY-MM-DD] | Initial scaffold | Project created |
-| 2026-07-11 | Added **User** entity (`@repo/models`) | Shared domain schema introduced by epic #1 / issue #2 |
-| 2026-07-11 | Added Drizzle `users` table persisting **User** in `apps/api` | NestJS API scaffold introduced by epic #1 / issue #4 |
-| 2026-07-11 | Removed `apps/client`; `apps/web` (Next.js) now consumes the API via TanStack Query + axios | Client superseded by web data layer (epic #15) |
-| 2026-07-11 | Added `user.created` domain event (emitted by `CreateUserUseCase`) | Logging/Events made mandatory in apps/api |
-| 2026-07-12 | apps/api tsconfig → shared nestjs.json (NodeNext, CJS); relative imports now extensionless | tsconfig consolidation |
-| 2026-07-12 | apps/api feature modules relocated to `src/modules/` (`users`, `health`) | Modules-folder convention adopted |
-| 2026-07-13 | Reset glossary to the full JobBranch domain: added **Auth payloads**, **CvVersion**, **Application**, **Vacante**, **Empresa**, **Hito**, **Feedback**, **Recordatorio**, **Metrics**; extended **User** with `role`; documented the CvVersion/Application state machines and the frontend view-model note | Epic #1 / issue #2 — foundation models + API persistence + glossary reset |
-| 2026-07-13 | Added `createCvVersionRequestSchema`/`CreateCvVersionRequest` (client-facing create body) alongside the existing `createCvVersionSchema`; implemented the `cv-versions` NestJS module (list/create/upload-file/set-output/archive) and the `apps/web` `/profiles` screen | Epic #1 / issue #6 — CV profiles (full-stack) |
-| 2026-07-13 | Filled the `apps/api` `branches` module (list/get/create/clone/archive/add-hito/add-feedback use-cases + `DrizzleBranchRepository` denormalizing `applications`/`vacantes`/`empresas`/`hitos`/`cv_versions` into the flat `Application` shape); added `hito.created` and `branch.archived` domain events plus the `AddHitoUseCase` terminal-status / direct-`Archivado` guards | Epic #1 / issue #5 — branch management backend |
-| 2026-07-13 | Extended **Metrics** with `SourceDistribution` and `AnalyticsOverview` (`sourceDistributionSchema`, `analyticsOverviewSchema`); implemented the `apps/api` `analytics` module (own `AnalyticsReadRepository` over `applications`/`hitos`/`cv_versions`) and the `apps/web` "Analítica" screen | Epic #1 / issue #7 — analytics (full-stack) |
-| 2026-07-13 | Added **FollowupItem** read-model (`@repo/models` `followup.schema.ts`) and the `apps/api` `followup` module (`list-followups`, `generate-reminders`, `mark-followup-done` use-cases over its own `applications`/`vacantes`/`empresas`/`recordatorios` read repository) | Epic #1 / issue #8 — follow-up / anti-ghosting full-stack slice |
-| 2026-07-13 | Added the RF15/CU15 permission matrix: **ComponentePermiso**/**GrupoPermisos**/**Accion** Composite tree + **ContextoSeguridad**, built per role by the **MatrizPermisosFactory** Factory (`PostulanteMatrizFactory`/`RecruiterMatrizFactory`); new `apps/api` `security` module (`ResolverPermisosUseCase`, `GET /security/matrix`), `@RequiereAccion`/`PermissionsGuard` enforcement wired onto `GET /security/matrix` and `GET /auth/me`; added `permissionMatrixSchema`/`PermissionMatrix` to `@repo/models` | Epic #1 / issue #10 — security permission matrix (Composite + Factory) [RF15], the canonical home for the two mandatory design patterns |
-| 2026-07-13 | Removed the file links to the now-deleted `SPEC.md` and `apps/v0-prototype/lib/data.ts`; glossary is now self-contained (domain attribution kept to the academic deliverable) | `apps/v0-prototype` app + `SPEC.md` removed from the repo |
-| 2026-07-13 | Added `meResponseSchema`/`MeResponse` to **Auth payloads**; `GET /auth/me` now resolves the full `User` via `GetUserUseCase` instead of returning the bare JWT payload | Epic #12 / issue #15 — sidebar real user identity, remove Settings, logout |
-| 2026-07-13 | Added **Persona**/`PersonaRecruiter`/`Postulante` (`persona.schema.ts`, discriminated union) and the `personas` Drizzle table (composes `User` via `usuario_id`, single-table-with-discriminator); added nullable `snapshotVacanteId`/`snapshot_vacante_id` to **CvVersion**/`cv_versions` (FK → `vacantes`); pre-documented `Formulario`/`Modulo` Composite nodes on **ComponentePermiso** on behalf of issue #20; one combined migration `0002_goofy_strong_guy.sql` | Epic #18 / issue #19 — foundation slice: shared domain models, DB schema + migration, glossary (buildable skeleton, no behavior wired) |
+  Application flow textually as `Enviado → Entrevista Técnica → RRHH → Oferta | Rechazo`, but the kanban
+  column order (`PIPELINE_STAGES` in `hito.schema.ts`) is
+  `Enviado → RRHH → Entrevista Técnica → Oferta → Rechazado`. Seeded applications move through
+  stages in either order (`apps/api/src/database/seed.ts`). Treat `PIPELINE_STAGES` as a
+  **display/board-column order**, not an enforced transition sequence — no guard rejects an
+  `Enviado → Entrevista Técnica` jump today.

@@ -1,22 +1,17 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Bell, ChevronRight, FileText, GitBranch, LayoutDashboard, LogOut } from "lucide-react";
+import { ChevronRight, GitBranch, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { codigoParaRuta, NAV_ITEMS } from "@/config/permissions.config";
+import { useLogout } from "@/hooks/use-logout";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useSession } from "@/hooks/use-session";
 import { SESSION_QUERY_KEY } from "@/query/session-query-key";
 import { clearAuthToken } from "@/utilities/auth-token.utility";
 import { cn } from "@/utilities/tailwind.utility";
-
-const NAV_ITEMS = [
-  { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/branches", icon: GitBranch, label: "Ramas" },
-  { href: "/analytics", icon: BarChart3, label: "Analítica" },
-  { href: "/followup", icon: Bell, label: "Follow-up" },
-  { href: "/profiles", icon: FileText, label: "Perfiles CV" },
-];
 
 function getInitials(nombreCompleto: string | undefined): string {
   if (!nombreCompleto) return "?";
@@ -36,8 +31,20 @@ export function Sidebar() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, isPending } = useSession();
+  const { can } = usePermissions();
+  const logout = useLogout();
 
-  const handleLogout = () => {
+  const visibleItems = isPending
+    ? []
+    : NAV_ITEMS.filter(({ href }) => {
+        const codigo = codigoParaRuta(href);
+
+        return codigo !== undefined && can(codigo);
+      });
+
+  const handleLogout = async () => {
+    // The token may already be dead (a 401 result): the local sign-out below runs either way.
+    await logout.mutateAsync();
     clearAuthToken();
     queryClient.removeQueries({ queryKey: SESSION_QUERY_KEY });
     router.push("/signin");
@@ -57,7 +64,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Principal</p>
         <ul className="space-y-0.5">
-          {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
+          {visibleItems.map(({ href, icon: Icon, label }) => {
             const active = pathname === href;
             return (
               <li key={href}>
@@ -91,10 +98,11 @@ export function Sidebar() {
         <button
           type="button"
           onClick={handleLogout}
+          disabled={logout.isPending}
           className="group mt-2 flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
           <LogOut className="h-4 w-4 group-hover:text-destructive" />
-          Cerrar sesion
+          Cerrar sesión
         </button>
       </div>
     </aside>

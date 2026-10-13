@@ -9,6 +9,7 @@ import { CreateBranchDialog } from "@/features/branches/create-branch-dialog";
 import { useApplications } from "@/hooks/use-applications";
 import { useArchiveApplication } from "@/hooks/use-archive-application";
 import { useCloneApplication } from "@/hooks/use-clone-application";
+import { usePermissions } from "@/hooks/use-permissions";
 import { type Application, type ApplicationStatus, EResult, PIPELINE_STAGES } from "@/models";
 import { differenceInDays } from "@/utilities/date.utility";
 import { cn } from "@/utilities/tailwind.utility";
@@ -39,6 +40,7 @@ function BranchesList({ applications }: { applications: Application[] }) {
 
   const cloneApplication = useCloneApplication();
   const archiveApplication = useArchiveApplication();
+  const { canDo } = usePermissions();
 
   const filtered = applications.filter((app) => {
     if (!showArchived && app.archived) {
@@ -63,14 +65,16 @@ function BranchesList({ applications }: { applications: Application[] }) {
             {filtered.length} proceso{filtered.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva Rama
-        </button>
+        {canDo("createBranch") && (
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva Rama
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -155,7 +159,8 @@ function BranchesList({ applications }: { applications: Application[] }) {
         </div>
       )}
 
-      <CreateBranchDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {/* Mounted only for who may open it: the dialog loads the CV versions on mount. */}
+      {canDo("createBranch") && <CreateBranchDialog open={createOpen} onOpenChange={setCreateOpen} />}
     </div>
   );
 }
@@ -167,6 +172,7 @@ interface BranchCardProps {
 }
 
 function BranchCard({ app, onClone, onArchive }: BranchCardProps) {
+  const { canDo } = usePermissions();
   const daysSince = differenceInDays(new Date(), new Date(app.lastUpdated));
   const isGhosting = daysSince >= 7 && app.status !== "Oferta" && app.status !== "Rechazado" && app.status !== "Archivado";
   const visibleStages: ApplicationStatus[] = PIPELINE_STAGES.filter((s) => s !== "Rechazado");
@@ -233,28 +239,32 @@ function BranchCard({ app, onClone, onArchive }: BranchCardProps) {
       <div className="mt-3 flex items-center justify-between border-border/50 border-t pt-3">
         <span className="rounded bg-secondary px-2 py-0.5 font-mono text-[11px] text-muted-foreground/70">{app.cvVersion.split(" — ")[0]}</span>
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onClone();
-            }}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            title="Clonar rama"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onArchive();
-            }}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            title="Archivar"
-          >
-            <Archive className="h-3.5 w-3.5" />
-          </button>
+          {canDo("cloneBranch") && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onClone();
+              }}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              title="Clonar rama"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canDo("archiveBranch") && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onArchive();
+              }}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              title="Archivar"
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </Link>

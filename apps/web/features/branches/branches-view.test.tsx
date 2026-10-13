@@ -1,9 +1,12 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Application } from "@/models";
 import { EResult } from "@/models";
+import { isolateLocalStorage } from "@/test/isolated-storage";
+import { ALL_POSTULANTE_CODES, sessionWith } from "@/test/session-fixture";
 import { renderWithClient } from "@/test/test-utils";
+import { clearAuthToken, setAuthToken } from "@/utilities/auth-token.utility";
 
 vi.mock("@/services/applications.service", () => ({
   applications_service: { list: vi.fn(), getById: vi.fn(), create: vi.fn(), clone: vi.fn(), archive: vi.fn(), addHito: vi.fn() },
@@ -13,8 +16,13 @@ vi.mock("@/services/cv-versions.service", () => ({
   cv_versions_service: { list: vi.fn(), create: vi.fn(), uploadFile: vi.fn(), setOutputProfile: vi.fn(), archive: vi.fn() },
 }));
 
+vi.mock("@/services/auth.service", () => ({
+  auth_service: { me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() },
+}));
+
 import { BranchesView } from "@/features/branches/branches-view";
 import { applications_service } from "@/services/applications.service";
+import { auth_service } from "@/services/auth.service";
 import { cv_versions_service } from "@/services/cv-versions.service";
 
 const MELI: Application = {
@@ -55,10 +63,19 @@ const ARCHIVED: Application = {
 };
 
 describe("BranchesView", () => {
+  isolateLocalStorage();
+
   beforeEach(() => {
     vi.mocked(applications_service.list).mockReset();
     vi.mocked(applications_service.clone).mockReset();
     vi.mocked(cv_versions_service.list).mockReset();
+    vi.mocked(auth_service.me).mockReset();
+    vi.mocked(auth_service.me).mockResolvedValue({ type: EResult.SUCCESS, value: sessionWith(ALL_POSTULANTE_CODES), status: 200 });
+    setAuthToken("test-token");
+  });
+
+  afterEach(() => {
+    clearAuthToken();
   });
 
   it("filters by search text and hides archived branches until toggled", async () => {
@@ -104,7 +121,7 @@ describe("BranchesView", () => {
     renderWithClient(<BranchesView />);
 
     await screen.findByText("Mercado Libre");
-    await user.click(screen.getByTitle("Clonar rama"));
+    await user.click(await screen.findByTitle("Clonar rama"));
 
     await waitFor(() => {
       expect(applications_service.clone).toHaveBeenCalledWith("app-1");
@@ -130,11 +147,31 @@ describe("BranchesView", () => {
     renderWithClient(<BranchesView />);
 
     await screen.findByText("Mercado Libre");
-    await user.click(screen.getByRole("button", { name: /Nueva Rama/i }));
+    await user.click(await screen.findByRole("button", { name: /Nueva Rama/i }));
 
     // If the techStack default regresses to an array, RHF throws on mount and
     // this assertion never resolves — the dialog title proves it mounted cleanly.
     expect(await screen.findByText("Registra un nuevo proceso de postulación.")).toBeInTheDocument();
     expect(screen.getByLabelText("Stack (separado por coma)")).toBeInTheDocument();
+  }, 15000);
+
+  it("hides Nueva Rama when the session lacks branch.create", async () => {
+    vi.mocked(auth_service.me).mockResolvedValue({
+      type: EResult.SUCCESS,
+      value: sessionWith(ALL_POSTULANTE_CODES.filter((codigo) => codigo !== "branch.create")),
+      status: 200,
+    });
+    vi.mocked(applications_service.list).mockResolvedValue({
+      type: EResult.SUCCESS,
+      value: [MELI],
+      status: 200,
+    });
+
+    renderWithClient(<BranchesView />);
+
+    // The clone icon only renders once the session has loaded, so the absence below is not a race.
+    expect(await screen.findByTitle("Clonar rama")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nueva Rama/i })).not.toBeInTheDocument();
+    expect(cv_versions_service.list).not.toHaveBeenCalled();
   }, 15000);
 });

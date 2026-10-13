@@ -4,6 +4,7 @@ import type { AuthResponse, RegisterInput } from "@repo/models";
 import { JwtService } from "../../../../shared/auth/jwt.service";
 import { AppLogger } from "../../../../shared/logger/app.logger";
 import { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
+import { MATRIZ_PERMISOS_FACTORIES, type MatrizPermisosFactories } from "../../../security/application/factories/matriz-permisos.factory";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
 import { LISTA_USUARIOS, type ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
 import { PasswordService } from "../password.service";
@@ -17,6 +18,7 @@ export class RegisterUseCase {
     private readonly logger: AppLogger,
     private readonly eventEmitter: EventEmitter2,
     private readonly createPersonaUseCase: CreatePersonaUseCase,
+    @Inject(MATRIZ_PERMISOS_FACTORIES) private readonly factories: MatrizPermisosFactories,
   ) {
     this.logger.setContext(RegisterUseCase.name);
   }
@@ -58,6 +60,9 @@ export class RegisterUseCase {
             puestoCorporativo: null,
             habilidadesMaster: [],
           });
+
+    // The role's factory hands the new Persona its default roots; its tree is loaded from the database from now on.
+    await this.factories[persona.tipo].otorgarRaices(persona.id);
 
     const token = this.jwtService.sign({ sub: usuario.id, role: persona.tipo });
 

@@ -4,6 +4,10 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { TERMINAL_STATUSES } from "../modules/branches/domain/terminal-statuses";
+import { crearFactories } from "../modules/security/application/factories/matriz-permisos.factory";
+import { SincronizarMatrizUseCase } from "../modules/security/application/use-cases/sincronizar-matriz.use-case";
+import { DrizzleComponentePermisoRepository } from "../modules/security/infrastructure/drizzle-componente-permiso.repository";
+import { AppLogger } from "../shared/logger/app.logger";
 import * as schema from "./schema/index";
 
 const DEMO_EMAIL = "demo@jobbranch.dev";
@@ -254,6 +258,40 @@ async function seedDemoPersona(db: Executor, usuarioId: string) {
   return created;
 }
 
+/** The only way an Administrador comes to exist (invariant 2): from the environment, with no default password. */
+async function seedAdministrador(db: Executor): Promise<void> {
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email || !password) {
+    console.log("ADMIN_EMAIL/ADMIN_PASSWORD not set — no Administrador seeded");
+    return;
+  }
+
+  const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, email));
+
+  if (existing) {
+    console.log(`Usuario ${email} already exists — no Administrador seeded`);
+    return;
+  }
+
+  const [usuario] = await db
+    .insert(schema.usuarios)
+    .values({
+      email,
+      nombreCompleto: process.env.ADMIN_NOMBRE_COMPLETO || "Administrador",
+      passwordHash: await bcrypt.hash(password, 10),
+    })
+    .returning();
+
+  if (!usuario) {
+    throw new Error("Failed to seed the Administrador");
+  }
+
+  await db.insert(schema.personas).values({ usuarioId: usuario.id, tipo: "administrador", puestoCorporativo: null, habilidadesMaster: [] });
+  console.log(`Seeded Administrador ${email}`);
+}
+
 async function seedCvVersions(db: Executor, usuarioId: string) {
   const cvVersionsByName = new Map<string, string>();
 
@@ -403,9 +441,15 @@ async function main() {
 
     const demoUser = await seedDemoUser(tx);
     await seedDemoPersona(tx, demoUser.id);
+    await seedAdministrador(tx);
     const cvVersionsByName = await seedCvVersions(tx, demoUser.id);
     return seedApplications(tx, demoUser.id, cvVersionsByName);
   });
+
+  // After the transaction commits: write the permission matrix catalog, then hand every Persona without
+  // roots (the demo Postulante, the Administrador) its role's default roots.
+  const repository = new DrizzleComponentePermisoRepository(db);
+  await new SincronizarMatrizUseCase(repository, crearFactories(repository), new AppLogger()).execute();
 
   await pool.end();
 

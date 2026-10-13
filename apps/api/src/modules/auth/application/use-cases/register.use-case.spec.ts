@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JwtService } from "../../../../shared/auth/jwt.service";
 import type { AppLogger } from "../../../../shared/logger/app.logger";
 import type { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
+import type { MatrizPermisosFactories } from "../../../security/application/factories/matriz-permisos.factory";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
 import type { ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
 import { Usuario } from "../../../users/domain/usuario";
@@ -35,6 +36,13 @@ const makeCreatePersonaUseCase = (created: Persona) =>
     execute: vi.fn().mockResolvedValue(created),
   }) as unknown as CreatePersonaUseCase;
 
+const makeFactories = () =>
+  ({
+    postulante: { otorgarRaices: vi.fn().mockResolvedValue(undefined) },
+    recruiter: { otorgarRaices: vi.fn().mockResolvedValue(undefined) },
+    administrador: { otorgarRaices: vi.fn().mockResolvedValue(undefined) },
+  }) as unknown as MatrizPermisosFactories;
+
 describe("RegisterUseCase", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -62,7 +70,8 @@ describe("RegisterUseCase", () => {
       tipo: "postulante",
       habilidadesMaster: [],
     });
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase);
+    const factories = makeFactories();
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories);
 
     const result = await useCase.execute({
       email: "a@b.com",
@@ -91,6 +100,42 @@ describe("RegisterUseCase", () => {
     expect(result).toEqual({ token: "signed.jwt", user });
   });
 
+  it("hands the new postulante Persona its role's default roots, and only that role's factory is called", async () => {
+    const created = new Usuario("u1", "a@b.com", "A", "hashed", "native", 0, null);
+    const lista = makeLista({
+      buscarPorEmail: vi.fn().mockResolvedValue(null),
+      agregarUsuario: vi.fn().mockResolvedValue(created),
+    });
+    const passwordService = { hash: vi.fn().mockResolvedValue("hashed"), compare: vi.fn() } as unknown as PasswordService;
+    const jwtService = { sign: vi.fn().mockReturnValue("signed.jwt"), verify: vi.fn() } as unknown as JwtService;
+    const createPersonaUseCase = makeCreatePersonaUseCase({ id: "p1", usuarioId: "u1", puestoCorporativo: null, tipo: "postulante", habilidadesMaster: [] });
+    const factories = makeFactories();
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, makeLogger(), { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, factories);
+
+    await useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" });
+
+    expect(factories.postulante.otorgarRaices).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(factories.recruiter.otorgarRaices).not.toHaveBeenCalled();
+    expect(factories.administrador.otorgarRaices).not.toHaveBeenCalled();
+  });
+
+  it("does not sign a token when handing out the roots fails", async () => {
+    const created = new Usuario("u1", "a@b.com", "A", "hashed", "native", 0, null);
+    const lista = makeLista({
+      buscarPorEmail: vi.fn().mockResolvedValue(null),
+      agregarUsuario: vi.fn().mockResolvedValue(created),
+    });
+    const passwordService = { hash: vi.fn().mockResolvedValue("hashed"), compare: vi.fn() } as unknown as PasswordService;
+    const jwtService = { sign: vi.fn(), verify: vi.fn() } as unknown as JwtService;
+    const createPersonaUseCase = makeCreatePersonaUseCase({ id: "p1", usuarioId: "u1", puestoCorporativo: null, tipo: "postulante", habilidadesMaster: [] });
+    const factories = makeFactories();
+    vi.mocked(factories.postulante.otorgarRaices).mockRejectedValue(new Error("db down"));
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, makeLogger(), { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, factories);
+
+    await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toThrow("db down");
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
   it("creates a recruiter persona defaulted from the registered nombreCompleto and signs its tipo as role", async () => {
     const created = new Usuario("u2", "r@b.com", "Rita", "hashed", "native", 0, null);
     const lista = makeLista({
@@ -110,7 +155,8 @@ describe("RegisterUseCase", () => {
       perApellido: "",
       fechaContratacion: "2026-07-13",
     });
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase);
+    const factories = makeFactories();
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories);
 
     await useCase.execute({
       email: "r@b.com",
@@ -129,6 +175,8 @@ describe("RegisterUseCase", () => {
       fechaContratacion: "2026-07-13",
     });
     expect(jwtService.sign).toHaveBeenCalledWith({ sub: "u2", role: "recruiter" });
+    expect(factories.recruiter.otorgarRaices).toHaveBeenCalledExactlyOnceWith("p2");
+    expect(factories.postulante.otorgarRaices).not.toHaveBeenCalled();
   });
 
   it("throws a generic conflict when the email is already registered", async () => {
@@ -145,7 +193,8 @@ describe("RegisterUseCase", () => {
       tipo: "postulante",
       habilidadesMaster: [],
     });
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase);
+    const factories = makeFactories();
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories);
 
     await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toBeInstanceOf(ConflictException);
     expect(lista.agregarUsuario).not.toHaveBeenCalled();

@@ -13,28 +13,7 @@ export class DrizzlePersonaRepository implements PersonaRepository {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   async create(input: CreatePersonaInput): Promise<Persona> {
-    const values =
-      input.tipo === "recruiter"
-        ? {
-            usuarioId: input.usuarioId,
-            tipo: input.tipo,
-            puestoCorporativo: input.puestoCorporativo,
-            perNombre: input.perNombre,
-            perApellido: input.perApellido,
-            fechaContratacion: input.fechaContratacion,
-            habilidadesMaster: [],
-          }
-        : {
-            usuarioId: input.usuarioId,
-            tipo: input.tipo,
-            puestoCorporativo: input.puestoCorporativo,
-            perNombre: null,
-            perApellido: null,
-            fechaContratacion: null,
-            habilidadesMaster: input.habilidadesMaster,
-          };
-
-    const [row] = await this.db.insert(personas).values(values).returning();
+    const [row] = await this.db.insert(personas).values(this.toRow(input)).returning();
 
     if (!row) {
       throw new Error("Failed to create persona");
@@ -49,6 +28,41 @@ export class DrizzlePersonaRepository implements PersonaRepository {
     return row ? this.toDomain(row) : null;
   }
 
+  private toRow(input: CreatePersonaInput): typeof personas.$inferInsert {
+    switch (input.tipo) {
+      case "recruiter":
+        return {
+          usuarioId: input.usuarioId,
+          tipo: input.tipo,
+          puestoCorporativo: input.puestoCorporativo,
+          perNombre: input.perNombre,
+          perApellido: input.perApellido,
+          fechaContratacion: input.fechaContratacion,
+          habilidadesMaster: [],
+        };
+      case "postulante":
+        return {
+          usuarioId: input.usuarioId,
+          tipo: input.tipo,
+          puestoCorporativo: input.puestoCorporativo,
+          perNombre: null,
+          perApellido: null,
+          fechaContratacion: null,
+          habilidadesMaster: input.habilidadesMaster,
+        };
+      case "administrador":
+        return {
+          usuarioId: input.usuarioId,
+          tipo: input.tipo,
+          puestoCorporativo: input.puestoCorporativo,
+          perNombre: null,
+          perApellido: null,
+          fechaContratacion: null,
+          habilidadesMaster: [],
+        };
+    }
+  }
+
   private toDomain(row: PersonaRow): Persona {
     if (row.tipo === "recruiter") {
       return {
@@ -59,6 +73,15 @@ export class DrizzlePersonaRepository implements PersonaRepository {
         perNombre: row.perNombre ?? "",
         perApellido: row.perApellido ?? "",
         fechaContratacion: row.fechaContratacion ?? "",
+      };
+    }
+
+    if (row.tipo === "administrador") {
+      return {
+        id: row.id,
+        usuarioId: row.usuarioId,
+        puestoCorporativo: row.puestoCorporativo,
+        tipo: "administrador",
       };
     }
 

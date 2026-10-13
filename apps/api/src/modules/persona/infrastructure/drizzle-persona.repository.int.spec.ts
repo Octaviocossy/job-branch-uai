@@ -75,6 +75,26 @@ describe("DrizzlePersonaRepository", () => {
     expect(found).toEqual(persona);
   });
 
+  it("persists an administrador persona and reads it back without role-specific fields", async () => {
+    const user = await listaUsuarios.agregarUsuario({
+      email: "admin@example.com",
+      nombreCompleto: "Ada Administradora",
+      passwordHash: null,
+    });
+    const input: CreatePersonaInput = {
+      tipo: "administrador",
+      usuarioId: user.id,
+      puestoCorporativo: null,
+    };
+
+    const persona = await repo.create(input);
+
+    expect(persona).toEqual({ id: persona.id, usuarioId: user.id, puestoCorporativo: null, tipo: "administrador" });
+
+    const found = await repo.findByUsuarioId(user.id);
+    expect(found).toEqual(persona);
+  });
+
   it("findByUsuarioId returns null when no persona exists for the user", async () => {
     const found = await repo.findByUsuarioId("00000000-0000-0000-0000-000000000000");
 

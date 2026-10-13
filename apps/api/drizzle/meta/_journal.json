@@ -29,6 +29,13 @@
       "when": 1791887158140,
       "tag": "0003_usuario_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791887818991,
+      "tag": "0004_permission_matrix",
+      "breakpoints": true
     }
   ]
 }

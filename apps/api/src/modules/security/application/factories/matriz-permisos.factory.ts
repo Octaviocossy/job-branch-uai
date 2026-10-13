@@ -1,92 +1,112 @@
 import type { PersonaTipo } from "@repo/models";
 import { Accion } from "../../domain/accion";
+import { ACCIONES, GRUPOS, type GrupoDefinicion } from "../../domain/catalogo-matriz";
 import type { ComponentePermiso } from "../../domain/componente-permiso";
-import { Formulario } from "../../domain/formulario";
+import type { ComponentePermisoRepository } from "../../domain/componente-permiso.repository";
 import { GrupoPermisos } from "../../domain/grupo-permisos";
-import { Modulo } from "../../domain/modulo";
 
+export const MATRIZ_PERMISOS_FACTORIES = Symbol("MATRIZ_PERMISOS_FACTORIES");
+
+/** Abstract Factory, one per role: defines the role's default roots, seeds their shared groups and hands them to a Persona. */
 export interface MatrizPermisosFactory {
-  crear(): ComponentePermiso;
+  readonly tipo: PersonaTipo;
+  /** The role's default roots: ids of shared default groups. */
+  raicesPorDefecto(): readonly string[];
+  /** In-memory build of the role's default trees (documents and tests the role's grants; never persisted from here). */
+  crear(): ComponentePermiso[];
+  /** Seeds this role's shared default groups (and their subgroups) when missing. */
+  sembrar(): Promise<void>;
+  /** Hands a Persona this role's default roots. */
+  otorgarRaices(personaId: string): Promise<void>;
 }
 
-function crearModulo(id: string, nombre: string, acciones: Accion[]): Modulo {
-  const modulo = new Modulo(`mod.${id}`, nombre);
-  const formulario = new Formulario(`form.${id}`, nombre);
+export type MatrizPermisosFactories = Record<PersonaTipo, MatrizPermisosFactory>;
 
-  for (const accion of acciones) {
-    formulario.agregarHijo(accion);
+const TODOS_LOS_GRUPOS: readonly GrupoDefinicion[] = Object.values(GRUPOS);
+
+/** Plain classes, not `@Injectable`, so the seed script can build them too. */
+abstract class MatrizPermisosFactoryBase implements MatrizPermisosFactory {
+  abstract readonly tipo: PersonaTipo;
+
+  constructor(private readonly repository: ComponentePermisoRepository) {}
+
+  abstract raicesPorDefecto(): readonly string[];
+
+  crear(): ComponentePermiso[] {
+    return this.raicesPorDefecto().map((id) => this.construirGrupo(this.grupo(id)));
   }
 
-  modulo.agregarHijo(formulario);
+  async sembrar(): Promise<void> {
+    const grupos = this.raicesPorDefecto().flatMap((id) => this.conDescendientes(this.grupo(id)));
 
-  return modulo;
-}
-
-export class PostulanteMatrizFactory implements MatrizPermisosFactory {
-  crear(): ComponentePermiso {
-    const root = new GrupoPermisos("postulante-root", "Permisos Postulante");
-
-    const cuentaGroup = crearModulo("cuenta", "Cuenta", [
-      new Accion("auth.me", "Ver perfil propio", "auth.me"),
-      new Accion("security.viewMatrix", "Ver matriz de permisos", "security.viewMatrix"),
-    ]);
-
-    const branchGroup = crearModulo("branch", "Gestión de Ramas", [
-      new Accion("branch.create", "Crear rama", "branch.create"),
-      new Accion("branch.clone", "Clonar rama", "branch.clone"),
-      new Accion("branch.archive", "Archivar rama", "branch.archive"),
-    ]);
-
-    const cvGroup = crearModulo("cv", "Gestión de CV", [
-      new Accion("cv.create", "Crear versión de CV", "cv.create"),
-      new Accion("cv.upload", "Subir archivo de CV", "cv.upload"),
-      new Accion("cv.setOutput", "Definir perfil de salida", "cv.setOutput"),
-    ]);
-
-    const followupGroup = crearModulo("followup", "Seguimiento", [new Accion("followup.resolve", "Resolver seguimiento", "followup.resolve")]);
-
-    root.agregarHijo(cuentaGroup);
-    root.agregarHijo(branchGroup);
-    root.agregarHijo(cvGroup);
-    root.agregarHijo(followupGroup);
-
-    return root;
+    await this.repository.asegurarGrupos(grupos);
   }
-}
 
-export class RecruiterMatrizFactory implements MatrizPermisosFactory {
-  crear(): ComponentePermiso {
-    const root = new GrupoPermisos("recruiter-root", "Permisos Recruiter");
+  async otorgarRaices(personaId: string): Promise<void> {
+    await this.repository.asignarRaices(personaId, this.raicesPorDefecto());
+  }
 
-    const cuentaGroup = crearModulo("cuenta", "Cuenta", [
-      new Accion("auth.me", "Ver perfil propio", "auth.me"),
-      new Accion("security.viewMatrix", "Ver matriz de permisos", "security.viewMatrix"),
-    ]);
+  private grupo(id: string): GrupoDefinicion {
+    const grupo = TODOS_LOS_GRUPOS.find((candidato) => candidato.id === id);
 
-    const boardGroup = crearModulo("board", "Gestión de Tablero", [
-      new Accion("board.view", "Ver tablero", "board.view"),
-      new Accion("board.updateStage", "Actualizar etapa", "board.updateStage"),
-    ]);
+    if (!grupo) {
+      throw new Error(`Unknown default group ${id}`);
+    }
 
-    const candidateGroup = crearModulo("candidate", "Gestión de Candidatos", [
-      new Accion("candidate.view", "Ver candidato", "candidate.view"),
-      new Accion("candidate.addFeedback", "Agregar feedback", "candidate.addFeedback"),
-      new Accion("candidate.scheduleInterview", "Agendar entrevista", "candidate.scheduleInterview"),
-    ]);
+    return grupo;
+  }
 
-    root.agregarHijo(cuentaGroup);
-    root.agregarHijo(boardGroup);
-    root.agregarHijo(candidateGroup);
+  private conDescendientes(grupo: GrupoDefinicion): GrupoDefinicion[] {
+    const hijos = TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === grupo.id);
 
-    return root;
+    return [grupo, ...hijos.flatMap((hijo) => this.conDescendientes(hijo))];
+  }
+
+  private construirGrupo(definicion: GrupoDefinicion): GrupoPermisos {
+    const grupo = new GrupoPermisos(definicion.id, definicion.nombre, definicion.descripcion);
+
+    for (const subgrupo of TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === definicion.id)) {
+      grupo.agregar(this.construirGrupo(subgrupo));
+    }
+
+    for (const accion of ACCIONES.filter((candidata) => candidata.grupoPorDefecto === definicion.id)) {
+      grupo.agregar(new Accion(accion.codigoAccion, accion.nombre, accion.codigoAccion, accion.formularioId));
+    }
+
+    return grupo;
   }
 }
 
-export function resolverFactory(role: PersonaTipo): MatrizPermisosFactory {
-  const factories: Record<PersonaTipo, () => MatrizPermisosFactory> = {
-    postulante: () => new PostulanteMatrizFactory(),
-    recruiter: () => new RecruiterMatrizFactory(),
+export class PostulanteMatrizFactory extends MatrizPermisosFactoryBase {
+  readonly tipo = "postulante";
+
+  // PIPELINE and SEGUIMIENTO are interim grants: the Postulante keeps everything it can do today
+  // until the separate Recruiter-side epic removes them (decisions 16 and 29).
+  raicesPorDefecto(): readonly string[] {
+    return [GRUPOS.CUENTA.id, GRUPOS.PERFILES.id, GRUPOS.ANALITICA.id, GRUPOS.PIPELINE.id, GRUPOS.SEGUIMIENTO.id];
+  }
+}
+
+export class RecruiterMatrizFactory extends MatrizPermisosFactoryBase {
+  readonly tipo = "recruiter";
+
+  raicesPorDefecto(): readonly string[] {
+    return [GRUPOS.CUENTA.id, GRUPOS.PIPELINE.id, GRUPOS.SEGUIMIENTO.id, GRUPOS.ANALITICA.id];
+  }
+}
+
+export class AdministradorMatrizFactory extends MatrizPermisosFactoryBase {
+  readonly tipo = "administrador";
+
+  raicesPorDefecto(): readonly string[] {
+    return [GRUPOS.CUENTA.id, GRUPOS.ADMIN_PERMISOS.id, GRUPOS.ADMIN_USUARIOS.id];
+  }
+}
+
+export function crearFactories(repository: ComponentePermisoRepository): MatrizPermisosFactories {
+  return {
+    postulante: new PostulanteMatrizFactory(repository),
+    recruiter: new RecruiterMatrizFactory(repository),
+    administrador: new AdministradorMatrizFactory(repository),
   };
-
-  return factories[role]();
 }

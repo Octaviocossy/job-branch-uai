@@ -7,8 +7,8 @@ logic, and persistence are kept in separate folders so each can change independe
 This rule describes the **real, current layout** of `apps/api/src/`. Logging (§6) and
 events (§7) are **mandatory** — every use case must inject the shared `AppLogger`, and any
 action with observers must publish a typed domain event after persistence. The `users`
-feature is the reference implementation for both patterns; copy it rather than inventing a
-new shape.
+feature (with `RegisterUseCase` in `auth`, which emits its event) is the reference
+implementation for both patterns; copy it rather than inventing a new shape.
 
 ---
 
@@ -46,22 +46,28 @@ apps/api/src/
   modules/
     users/
       presentation/
-        users.controller.ts            # HTTP only; Zod validation pipe
+        users.controller.ts            # HTTP only; GET handlers behind JwtAuthGuard + PermissionsGuard
       application/
         use-cases/
-          create-user.use-case.ts       # one business action each
-          get-user.use-case.ts
+          get-user.use-case.ts          # one business action each
           list-users.use-case.ts
-          create-user.use-case.spec.ts
+          get-user.use-case.spec.ts
         listeners/
           user-created.listener.ts      # @OnEvent consumer
       domain/
-        user.repository.ts              # UserRepository interface + USER_REPOSITORY DI token
+        usuario.ts                      # Usuario domain entity (autenticar, incrementarIntentos, obtenerRol)
+        lista-usuarios.repository.ts    # ListaUsuarios interface + LISTA_USUARIOS DI token
+        password-hasher.ts              # hashing port used by Usuario.autenticar()
         events/
           user-created.event.ts         # USER_CREATED_EVENT name + UserCreatedEvent payload
       infrastructure/
-        drizzle-user.repository.ts      # Drizzle implementation of the port
+        drizzle-lista-usuarios.repository.ts   # Drizzle implementation of the port
       users.module.ts
+    auth/
+      application/
+        use-cases/
+          register.use-case.ts          # emits USER_CREATED_EVENT after the Usuario is persisted
+          ...                           # login, iniciar-sesion, validar-sesion, cerrar-sesion
     health/
       health.controller.ts             # liveness endpoint; no use-case/domain/infra layers
       health.module.ts
@@ -69,14 +75,20 @@ apps/api/src/
     database.module.ts
     database.constants.ts
     schema/
-      users.schema.ts
+      usuarios.schema.ts
       index.ts
   common/
     pipes/
       zod-validation.pipe.ts
+    guards/
+      permissions.guard.ts            # checks @RequiereAccion against the Sesion's ContextoSeguridad
+    decorators/
+      requiere-accion.decorator.ts    # @RequiereAccion('<codigo>') — one Accion per protected endpoint
   config/
     env.validation.ts
   shared/
+    auth/
+      jwt-auth.guard.ts               # bearer JWT + a live Sesion
     logger/
       app.logger.ts                   # AppLogger — transient ConsoleLogger subclass
       logger.module.ts                # LoggerModule — @Global(), provides/exports AppLogger
@@ -100,17 +112,20 @@ duplicating it per feature. `shared/logger/` exists today and hosts the mandator
 ## 3. Naming conventions
 
 - **Use cases:** `[verb]-[resource].use-case.ts` in `application/use-cases/`, exporting one
-  `*UseCase` class with a single `execute(...)` method (e.g. `create-user.use-case.ts` →
-  `CreateUserUseCase`). One file, one class, one business action.
+  `*UseCase` class with a single `execute(...)` method (e.g. `get-user.use-case.ts` →
+  `GetUserUseCase`). One file, one class, one business action.
 - **Controllers:** `[resource].controller.ts` in `presentation/` (e.g. `users.controller.ts` →
   `UsersController`).
 - **Repository port:** `[resource].repository.ts` in `domain/`, exporting both the interface
-  (e.g. `UserRepository`) **and** an injection token constant (e.g.
-  `export const USER_REPOSITORY = Symbol("USER_REPOSITORY")`).
+  (e.g. `ListaUsuarios`) **and** an injection token constant (e.g.
+  `export const LISTA_USUARIOS = Symbol("LISTA_USUARIOS")` in `lista-usuarios.repository.ts`).
+  In the security and identity scope the port takes the academic spec's name (ADR-0023), so
+  `ListaUsuarios` keeps it rather than a `[Resource]Repository` name — do not rename it to
+  match the pattern.
 - **Repository implementation:** `drizzle-[resource].repository.ts` in `infrastructure/`
-  (e.g. `drizzle-user.repository.ts` → `DrizzleUserRepository implements UserRepository`).
+  (e.g. `drizzle-lista-usuarios.repository.ts` → `DrizzleListaUsuarios implements ListaUsuarios`).
 - **Imports:** intra-package relative imports are **extensionless**, e.g.
-  `import { UserRepository, USER_REPOSITORY } from "../../domain/user.repository";`. `apps/api`
+  `import { LISTA_USUARIOS, type ListaUsuarios } from "../../domain/lista-usuarios.repository";`. `apps/api`
   extends `@repo/typescript-config/nestjs.json` (`module`/`moduleResolution: NodeNext`) but
   emits **CommonJS** — `apps/api/package.json` has no `"type": "module"` — so NodeNext resolves
   relative imports without a file extension. Do **not** add `.js` extensions, and do **not** add
@@ -147,12 +162,12 @@ This project validates requests with **shared Zod schemas from `@repo/models`**,
 class-validator DTOs:
 
 - Request bodies are validated in the controller via `new ZodValidationPipe(<schema>)`, e.g.
-  `@Body(new ZodValidationPipe(createUserSchema)) body: CreateUserInput` in
-  `UsersController.create`.
+  `@Body(new ZodValidationPipe(registerSchema)) body: RegisterInput` in
+  `AuthController.register`.
 - `ZodValidationPipe` (`common/pipes/zod-validation.pipe.ts`) implements Nest's
   `PipeTransform`, calls `schema.safeParse(value)`, and throws `BadRequestException` with the
   Zod issues on failure.
-- Types used across the controller/use-case boundary (`CreateUserInput`, `User`, …) are
+- Types used across the controller/use-case boundary (`RegisterInput`, `Usuario`, …) are
   imported from `@repo/models` — the same package that defines the Zod schemas — so the API
   and the persistence layer share one source of truth for shape. See
   `.agents/ubiquitous-language.md` for the canonical entity/type mapping.
@@ -170,9 +185,9 @@ subclass of Nest's `ConsoleLogger`), provided/exported by the `@Global()` `Logge
 the module.
 
 - Inject via the constructor, e.g.
-  `constructor(@Inject(USER_REPOSITORY) private readonly userRepository: UserRepository, private readonly logger: AppLogger) {}`.
+  `constructor(@Inject(LISTA_USUARIOS) private readonly listaUsuarios: ListaUsuarios, private readonly logger: AppLogger) {}`.
 - Set the logging **context** to the use case's class name in the constructor body:
-  `this.logger.setContext(CreateUserUseCase.name)`.
+  `this.logger.setContext(GetUserUseCase.name)`.
 - Use leveled calls (`logger.debug(...)`, `logger.log(...)`, `logger.warn(...)`,
   `logger.error(...)`) instead of `console.*` anywhere in `application/`, `domain/`, or
   `infrastructure/` — `console.*` is also flagged by Biome's `suspicious.noConsole` (warn).
@@ -192,7 +207,7 @@ instead of calling the side-effect inline.
 - For domain events, use Nest's `EventEmitter2` (`@nestjs/event-emitter`, wired via
   `EventEmitterModule.forRoot()` in `AppModule`): a use case emits an event *after* the
   repository call succeeds (e.g. `this.eventEmitter.emit(USER_CREATED_EVENT, { user })` inside
-  `CreateUserUseCase.execute`, after `await this.userRepository.create(input)` resolves),
+  `RegisterUseCase.execute`, after `await this.listaUsuarios.agregarUsuario(...)` resolves),
   never before persistence.
 - The event **name constant** and **payload interface** live in `domain/events/` (transport-
   agnostic — no `@nestjs/event-emitter` import there); the **listener** (the reaction) lives in
@@ -203,7 +218,7 @@ instead of calling the side-effect inline.
   publish directly to an external broker from inside a use case.
 - Reference implementation: `modules/users/domain/events/user-created.event.ts`,
   `modules/users/application/listeners/user-created.listener.ts`, and the emit call in
-  `modules/users/application/use-cases/create-user.use-case.ts` (see §9).
+  `modules/auth/application/use-cases/register.use-case.ts` (see §9).
 
 ---
 
@@ -217,8 +232,8 @@ Use a dedicated use case when the action has any of:
   job triggering "create user").
 
 For thin CRUD with no real logic beyond "validate and persist," a use case is still the
-convention in this codebase (see `CreateUserUseCase`, `GetUserUseCase`, `ListUsersUseCase` —
-each is a one-line passthrough to the repository port) — keep using one use case per action
+convention in this codebase (see `GetUserUseCase` and `ListUsersUseCase` — each is a
+one-line passthrough to the `ListaUsuarios` port) — keep using one use case per action
 rather than collapsing multiple actions into a shared "service" class, so the per-action
 boundary stays consistent as logic grows.
 
@@ -226,27 +241,32 @@ boundary stays consistent as logic grows.
 
 ## 9. Reference implementation (real code)
 
-- `presentation/users.controller.ts` — `UsersController` injects `CreateUserUseCase`,
-  `GetUserUseCase`, `ListUsersUseCase`; `@Post()` validates with
-  `new ZodValidationPipe(createUserSchema)` against the `@repo/models` `CreateUserInput` type;
-  `findOne` throws `NotFoundException` when `GetUserUseCase.execute` resolves `null`.
-- `application/use-cases/create-user.use-case.ts` — `CreateUserUseCase` receives
-  `@Inject(USER_REPOSITORY) private readonly userRepository: UserRepository`, `AppLogger`, and
-  `EventEmitter2`; calls `this.userRepository.create(input)`, then emits `USER_CREATED_EVENT`
-  with `{ user }` **after** the repository call resolves, with `debug`/`log` calls around it.
-- `domain/user.repository.ts` — exports `USER_REPOSITORY` (a `Symbol`) and the
-  `UserRepository` interface (`create`, `findById`, `findAll`).
-- `infrastructure/drizzle-user.repository.ts` — `DrizzleUserRepository implements
-  UserRepository`, injecting the Drizzle client via `@Inject(DRIZZLE)` and using
-  `drizzle-orm`'s `eq` plus the `users` schema table.
+- `presentation/users.controller.ts` — `UsersController` injects `GetUserUseCase` and
+  `ListUsersUseCase`; its two `@Get` handlers sit behind
+  `@UseGuards(JwtAuthGuard, PermissionsGuard)` and each declares its `@RequiereAccion(...)`
+  (`usuario.list`, `usuario.view`); `findOne` throws `NotFoundException` when
+  `GetUserUseCase.execute` resolves `null`. A request body is validated in
+  `AuthController.register` with `new ZodValidationPipe(registerSchema)` against the
+  `@repo/models` `RegisterInput` type.
+- `modules/auth/application/use-cases/register.use-case.ts` — `RegisterUseCase` receives
+  `@Inject(LISTA_USUARIOS) private readonly listaUsuarios: ListaUsuarios`, `AppLogger`, and
+  `EventEmitter2` (among its other collaborators); calls `this.listaUsuarios.agregarUsuario(...)`,
+  then emits `USER_CREATED_EVENT` with `{ user }` **after** the repository call resolves, with
+  `debug`/`log` calls around it.
+- `domain/lista-usuarios.repository.ts` — exports `LISTA_USUARIOS` (a `Symbol`) and the
+  `ListaUsuarios` interface (`agregarUsuario`, `buscarPorEmail`, `buscarPorId`, `listar`,
+  `guardar`).
+- `infrastructure/drizzle-lista-usuarios.repository.ts` — `DrizzleListaUsuarios implements
+  ListaUsuarios`, injecting the Drizzle client via `@Inject(DRIZZLE)` and using
+  `drizzle-orm`'s `eq` plus the `usuarios` schema table.
 - `users.module.ts` — wires the port to its implementation with
-  `{ provide: USER_REPOSITORY, useClass: DrizzleUserRepository }` and registers
+  `{ provide: LISTA_USUARIOS, useClass: DrizzleListaUsuarios }` and registers
   `UserCreatedListener` as a provider.
 - `shared/logger/app.logger.ts` — `AppLogger`, a `Scope.TRANSIENT` subclass of Nest's
   `ConsoleLogger`.
 - `shared/logger/logger.module.ts` — `LoggerModule`, `@Global()`, provides/exports `AppLogger`.
 - `modules/users/domain/events/user-created.event.ts` — `USER_CREATED_EVENT` name constant +
-  `UserCreatedEvent` payload interface (`{ user: User }`).
+  `UserCreatedEvent` payload interface (`{ user: Usuario }`).
 - `modules/users/application/listeners/user-created.listener.ts` — `UserCreatedListener`, an
   `@OnEvent(USER_CREATED_EVENT)` handler that logs via `AppLogger`.
 - `app.module.ts` — imports `EventEmitterModule.forRoot()` and `LoggerModule` alongside the

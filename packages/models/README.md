@@ -10,22 +10,21 @@ TypeScript type from that schema, so the NestJS API (`apps/api`) and the Next.js
 (`apps/web`) validate and type the same contract — no drifting, hand-written duplicate
 interfaces.
 
-Today it exports the **User** entity:
+It holds one `src/schemas/<entity>.schema.ts` per domain entity or API contract. The identity
+and security schemas are:
 
-| Export | Kind | Description |
-|--------|------|-------------|
-| `userSchema` | Zod schema | A `User`: `id` (`z.uuid()`), `email` (`z.email()`), `displayName` (`z.string().min(1)`). |
-| `createUserSchema` | Zod schema | `userSchema.omit({ id: true })` — the input shape for creating a user. |
-| `User` | type | `z.infer<typeof userSchema>`. |
-| `CreateUserInput` | type | `z.infer<typeof createUserSchema>`. |
+| Schema file | Exports | Description |
+|-------------|---------|-------------|
+| `usuario.schema.ts` | `usuarioSchema`, `Usuario` | The account: `id` (`z.uuid()`), `email` (`z.email()`), `nombreCompleto`, `authProvider`, `intentosFallidos`. It carries **no role** (the role is the Persona's `tipo`) and **no `passwordHash`** — that never leaves `apps/api`. |
+| `auth.schema.ts` | `registerRoleSchema`, `registerSchema`, `loginSchema`, `authResponseSchema`, `meResponseSchema` and their types | The auth payloads. `registerRoleSchema` is `postulante` \| `recruiter` — **never `administrador`**, which only the seed creates. `AuthResponse` is `{ token, user }`; `MeResponse` is `{ user, permisos }`, `permisos` being the `codigoAccion` values the session's permission tree holds — what `apps/web` filters its menu and buttons by. |
+| `persona.schema.ts` | `personaTipoSchema`, `personaSchema`, `createPersonaSchema` and the three subtypes | The role-specific profile composing a `Usuario`, a discriminated union on `tipo`: `personaRecruiterSchema`/`PersonaRecruiter`, `postulanteSchema`/`Postulante` and `administradorSchema`/`Administrador`. The recruiter subtype is named `personaRecruiterSchema`/`PersonaRecruiter`, not `recruiterSchema`/`Recruiter`, to avoid colliding with `application.schema.ts`'s recruiter-contact view-model. |
+| `permiso.schema.ts` | `permissionMatrixSchema`, `catalogoMatrizSchema`, `grupoPermisosSchema`, `createGrupoPermisosSchema`, `updateGrupoPermisosSchema`, `personaRaicesSchema`, `asignarRaizSchema` and their types | The permission-matrix contracts: `PermissionMatrix` is `GET /security/matrix` (`{ role, modulos }`, the caller's permitted Acciones grouped by Modulo and Formulario); `CatalogoMatriz` is `GET /security/catalog`; the rest are the Administrador's group and root-assignment endpoints (`GrupoPermisos`, `PersonaRaices`). |
 
-Later slices added further schemas alongside `User`, including `persona.schema.ts`
-(`personaSchema`, a discriminated union on `tipo` — `personaRecruiterSchema`/`PersonaRecruiter`
-and `postulanteSchema`/`Postulante`; the recruiter subtype is named `personaRecruiterSchema`/
-`PersonaRecruiter`, not `recruiterSchema`/`Recruiter`, to avoid colliding with
-`application.schema.ts`'s recruiter-contact view-model) and a `snapshotVacanteId` (nullable
-`z.uuid()`) field added to `cv-version.schema.ts`'s `cvVersionSchema` — the `VersionPerfil →
-Vacante` snapshot reference.
+The other schemas (`application`, `cv-version`, `empresa`, `vacante`, `hito`, `feedback`,
+`recordatorio`, `followup`, `metrics`) cover the job-search domain; `cv-version.schema.ts`'s
+`cvVersionSchema` carries a `snapshotVacanteId` (nullable `z.uuid()`) — the `VersionPerfil →
+Vacante` snapshot reference. In the security and identity scope the names are the academic spec's
+(`Usuario`, `nombreCompleto`), per [ADR-0023](../../.agents/adr/0023-code-follows-the-spec-class-diagram-first.md).
 
 The canonical entity names, fields, and persistence mapping live in the root
 [`.agents/ubiquitous-language.md`](../../.agents/ubiquitous-language.md).
@@ -36,13 +35,13 @@ Add the package as a `workspace:*` dependency of the consuming app, then import 
 and types directly by name:
 
 ```ts
-import { userSchema, createUserSchema, type User } from "@repo/models";
+import { registerSchema, usuarioSchema, type Usuario } from "@repo/models";
 
 // Validate untrusted input
-const result = createUserSchema.safeParse(await request.json());
+const result = registerSchema.safeParse(await request.json());
 
 // Use the inferred type
-const user: User = userSchema.parse(row);
+const usuario: Usuario = usuarioSchema.parse(row);
 ```
 
 ```jsonc
@@ -91,10 +90,11 @@ This package has a **single node-tier Vitest suite** — no DOM, no database, no
 split into further tiers — and is the **canonical home for Zod schema tests** in the
 repo. Its config (`vitest.config.ts`) merges the [`@repo/vitest-config/node`](../vitest-config)
 preset. Tests cover: valid input parses, each field constraint rejects bad input on its
-own, and derived-schema relationships (e.g. `createUserSchema` omits exactly `id`).
+own, and invariants a schema carries (e.g. `registerSchema` rejects the role `administrador`,
+and the registration payload never carries a `passwordHash`).
 
 **Import convention:** relative imports in `src/` (including test files) are
-extensionless — `import { userSchema } from "./user.schema"`, not `"./user.schema.js"`.
+extensionless — `import { usuarioSchema } from "./usuario.schema"`, not `"./usuario.schema.js"`.
 This package is bundled by `tsup` and its `tsconfig.json` uses `Bundler` module
 resolution, so `check-types` and Vitest both resolve bare specifiers (no NodeNext
 `.js`-suffix requirement).

@@ -24,10 +24,10 @@ tests in the repo:
   `success: true`).
 - Each field's constraint rejects bad input on its own — `z.uuid()` rejects a non-UUID
   string, `z.email()` rejects a non-email string, `.min(1)` rejects an empty string.
-- Derived schemas keep their relationship to the base schema — e.g. `createUserSchema =
-  userSchema.omit({ id: true })` (`packages/models/src/schemas/user.schema.ts`) should be
-  asserted to omit exactly the fields it claims to, not silently drift as the base schema
-  changes.
+- Derived schemas keep their relationship to the base schema — e.g. `createPersonaSchema`,
+  each Persona subtype `.omit({ id: true })`
+  (`packages/models/src/schemas/persona.schema.ts`), should be asserted to omit exactly the
+  fields it claims to, not silently drift as the base schema changes.
 
 ## 3. What NOT to test / cross-reference
 
@@ -43,15 +43,15 @@ tests in the repo:
 ## 4. Naming & placement
 
 - `*.test.ts` lives **beside** the schema it covers, e.g.
-  `src/schemas/user.schema.test.ts` next to `src/schemas/user.schema.ts`.
+  `src/schemas/usuario.schema.test.ts` next to `src/schemas/usuario.schema.ts`.
 - The config's `include` is `src/**/*.test.ts` — any test file must live under `src/` to
   be picked up.
 
 ## 5. Extensionless relative imports (Bundler resolution)
 
 Relative imports in test files are **extensionless**, matching the convention used in
-`src/index.ts` — e.g. `import { userSchema } from "./user.schema"`, not
-`"./user.schema.js"`. This package overrides `module`/`moduleResolution` to `ESNext`/`Bundler`
+`src/index.ts` — e.g. `import { usuarioSchema } from "./usuario.schema"`, not
+`"./usuario.schema.js"`. This package overrides `module`/`moduleResolution` to `ESNext`/`Bundler`
 in its `tsconfig.json` (it is bundled by `tsup`, not emitted by `tsc`), so `check-types`
 accepts bare specifiers — a `.js` extension is **not** required and should not be added. Do
 not re-introduce the old NodeNext `.js`-suffix convention here. Import Vitest primitives

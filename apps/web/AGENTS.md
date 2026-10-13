@@ -23,6 +23,21 @@ services, or API access.** It documents the full request flow (UI → hooks → 
 `api` utility → axios → `apps/api`), the `TResult`/`ApiError` contract, retry policy,
 and base-URL configuration.
 
+## Permission-aware UI
+
+The menu, the action buttons and the routes show only what the signed-in Persona may do.
+`config/permissions.config.ts` is the single static map: `ROUTE_PERMISSIONS` (route →
+`codigoAccion`, dynamic segments as `[param]`), `ACTION_PERMISSIONS` (button → the
+`codigoAccion` values it needs) and `NAV_ITEMS` (the sidebar). `hooks/use-permissions.ts`
+(`usePermissions`) turns the `permisos` of `GET /auth/me` (`MeResponse`, read by `useSession`)
+into `can(...codes)` and `canDo(action)`; `components/route-permission-guard.tsx` redirects a
+route the Persona may not open. **When you add a screen, a button or an endpoint call, give it a
+`codigoAccion` in that map and gate it with `usePermissions`.** The `codigoAccion` values are the
+API's `Accion` catalog (`apps/api/src/modules/security/domain/catalogo-matriz.ts`; the
+endpoint → code table is in `apps/api/README.md`). Hiding is UX, not security — the API checks
+every request. The Administrador's matrix screen is `features/admin/`. A component test of a
+gated control must sign in first (see `.agents/rules/testing-strategy.md`).
+
 ## Commands
 
 Scoped to this app via Turborepo's `--filter` (run from the repo root):

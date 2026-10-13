@@ -3,20 +3,39 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { PersonaModule } from "../persona/persona.module";
 import { ContextosSeguridadService } from "./application/contextos-seguridad.service";
 import { crearFactories, MATRIZ_PERMISOS_FACTORIES } from "./application/factories/matriz-permisos.factory";
+import { ActualizarGrupoUseCase } from "./application/use-cases/actualizar-grupo.use-case";
+import { AsignarRaizUseCase } from "./application/use-cases/asignar-raiz.use-case";
+import { CrearGrupoUseCase } from "./application/use-cases/crear-grupo.use-case";
+import { EliminarGrupoUseCase } from "./application/use-cases/eliminar-grupo.use-case";
+import { ListarGruposUseCase } from "./application/use-cases/listar-grupos.use-case";
+import { ListarPersonasConRaicesUseCase } from "./application/use-cases/listar-personas-con-raices.use-case";
+import { ObtenerCatalogoUseCase } from "./application/use-cases/obtener-catalogo.use-case";
+import { ObtenerMatrizUseCase } from "./application/use-cases/obtener-matriz.use-case";
+import { RemoverRaizUseCase } from "./application/use-cases/remover-raiz.use-case";
 import { ResolverPermisosUseCase } from "./application/use-cases/resolver-permisos.use-case";
 import { SincronizarMatrizUseCase } from "./application/use-cases/sincronizar-matriz.use-case";
 import { COMPONENTE_PERMISO_REPOSITORY } from "./domain/componente-permiso.repository";
 import { DrizzleComponentePermisoRepository } from "./infrastructure/drizzle-componente-permiso.repository";
+import { AdministracionMatrizController } from "./presentation/administracion-matriz.controller";
 import { SecurityController } from "./presentation/security.controller";
 
 // @Global so any feature module's controllers can use PermissionsGuard without importing this module.
 @Global()
 @Module({
   imports: [PersonaModule],
-  controllers: [SecurityController],
+  controllers: [SecurityController, AdministracionMatrizController],
   providers: [
     ResolverPermisosUseCase,
     SincronizarMatrizUseCase,
+    ObtenerCatalogoUseCase,
+    ObtenerMatrizUseCase,
+    ListarGruposUseCase,
+    CrearGrupoUseCase,
+    ActualizarGrupoUseCase,
+    EliminarGrupoUseCase,
+    ListarPersonasConRaicesUseCase,
+    AsignarRaizUseCase,
+    RemoverRaizUseCase,
     ContextosSeguridadService,
     PermissionsGuard,
     { provide: COMPONENTE_PERMISO_REPOSITORY, useClass: DrizzleComponentePermisoRepository },

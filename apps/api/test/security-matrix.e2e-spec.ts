@@ -66,16 +66,17 @@ describe("Security matrix (e2e)", () => {
     expect(permisos.filter((codigo) => codigo.startsWith("branch."))).toEqual([]);
   });
 
-  it("GET /security/matrix returns the caller's role and acciones", async () => {
+  it("GET /security/matrix returns the caller's role and Acciones grouped by Modulo and Formulario", async () => {
     const { token } = await registrar(http, { role: "recruiter" });
 
     const response = await request(http).get("/security/matrix").set("Authorization", `Bearer ${token}`);
     const body = response.body as PermissionMatrix;
+    const acciones = body.modulos.flatMap((modulo) => modulo.formularios.flatMap((formulario) => formulario.acciones.map((accion) => accion.codigoAccion)));
 
     expect(response.status).toBe(200);
     expect(body.role).toBe("recruiter");
-    expect(body.acciones).toContain("branch.archive");
-    expect(body.acciones).not.toContain("cv.upload");
+    expect(acciones).toContain("branch.archive");
+    expect(acciones).not.toContain("cv.upload");
   });
 
   it("a Persona's permisos come from the database: a role's default roots are handed at registration", async () => {

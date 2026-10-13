@@ -1,12 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { eq, isNull, sql } from "drizzle-orm";
+import type { ComponenteResumen, GrupoPermisos as GrupoPermisosModel, PersonaRaices } from "@repo/models";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DRIZZLE } from "../../../database/database.constants";
 import type { Database } from "../../../database/database.module";
-import { componentes, formularios, modulos, personaComponentes, personas } from "../../../database/schema/index";
+import { componentes, formularios, modulos, personaComponentes, personas, usuarios } from "../../../database/schema/index";
 import { Accion } from "../domain/accion";
 import type { AccionDefinicion, GrupoDefinicion } from "../domain/catalogo-matriz";
 import type { ComponentePermiso } from "../domain/componente-permiso";
-import type { ComponentePermisoRepository, PersonaSinRaices } from "../domain/componente-permiso.repository";
+import type { CatalogoFilas, ComponenteFila, ComponentePermisoRepository, GrupoCampos, PersonaFila, PersonaSinRaices } from "../domain/componente-permiso.repository";
 import type { Formulario } from "../domain/formulario";
 import { GrupoPermisos } from "../domain/grupo-permisos";
 import type { Modulo } from "../domain/modulo";
@@ -104,6 +106,198 @@ export class DrizzleComponentePermisoRepository implements ComponentePermisoRepo
       .from(personas)
       .leftJoin(personaComponentes, eq(personaComponentes.personaId, personas.id))
       .where(isNull(personaComponentes.personaId));
+  }
+
+  async listarCatalogo(): Promise<CatalogoFilas> {
+    const padre = alias(componentes, "padre");
+    const [filasModulos, filasFormularios, filasAcciones] = await Promise.all([
+      this.db.select({ id: modulos.id, nombre: modulos.nombre }).from(modulos),
+      this.db.select({ id: formularios.id, nombre: formularios.nombre, moduloId: formularios.moduloId }).from(formularios),
+      this.db
+        .select({
+          id: componentes.id,
+          codigoAccion: componentes.codigoAccion,
+          nombre: componentes.nombre,
+          formularioId: componentes.formularioId,
+          padreId: componentes.padreId,
+          padreNombre: padre.nombre,
+        })
+        .from(componentes)
+        .leftJoin(padre, eq(padre.id, componentes.padreId))
+        .where(eq(componentes.tipo, "accion")),
+    ]);
+
+    return {
+      modulos: filasModulos,
+      formularios: filasFormularios,
+      // The table check guarantees an Accion row has both; the filter only narrows the types.
+      acciones: filasAcciones.flatMap(({ codigoAccion, formularioId, ...fila }) =>
+        codigoAccion !== null && formularioId !== null ? [{ ...fila, codigoAccion, formularioId }] : [],
+      ),
+    };
+  }
+
+  async listarGrupos(): Promise<GrupoPermisosModel[]> {
+    const [filas, raices] = await Promise.all([
+      this.db.select().from(componentes),
+      this.db.select({ componenteId: personaComponentes.componenteId, total: sql<number>`count(*)::int` }).from(personaComponentes).groupBy(personaComponentes.componenteId),
+    ]);
+    const personasPorRaiz = new Map(raices.map(({ componenteId, total }) => [componenteId, total]));
+    const hijosPorPadre = new Map<string, ComponenteResumen[]>();
+
+    for (const fila of [...filas].sort(porNombre)) {
+      if (fila.padreId) {
+        hijosPorPadre.set(fila.padreId, [...(hijosPorPadre.get(fila.padreId) ?? []), { id: fila.id, tipo: fila.tipo, nombre: fila.nombre, codigoAccion: fila.codigoAccion }]);
+      }
+    }
+
+    return filas
+      .filter((fila) => fila.tipo === "grupo")
+      .sort(porNombre)
+      .map((fila) => ({
+        id: fila.id,
+        nombre: fila.nombre,
+        descripcion: fila.descripcion,
+        padreId: fila.padreId,
+        hijos: hijosPorPadre.get(fila.id) ?? [],
+        personasConRaiz: personasPorRaiz.get(fila.id) ?? 0,
+      }));
+  }
+
+  async buscarComponente(id: string): Promise<ComponenteFila | null> {
+    const [fila] = await this.db.select({ id: componentes.id, tipo: componentes.tipo, padreId: componentes.padreId }).from(componentes).where(eq(componentes.id, id));
+
+    return fila ?? null;
+  }
+
+  async ancestros(id: string): Promise<string[]> {
+    // The whole matrix is a few dozen rows, so walking it in memory beats a recursive query.
+    const filas = await this.db.select({ id: componentes.id, padreId: componentes.padreId }).from(componentes);
+    const padres = new Map(filas.map(({ id: filaId, padreId }) => [filaId, padreId]));
+    const cadena: string[] = [];
+    let actual = padres.get(id) ?? null;
+
+    // `cadena.includes` stops a walk over a cycle that the use cases forbid but the table cannot rule out.
+    while (actual !== null && !cadena.includes(actual)) {
+      cadena.push(actual);
+      actual = padres.get(actual) ?? null;
+    }
+
+    return cadena;
+  }
+
+  async crearGrupo({ nombre, descripcion, padreId }: { nombre: string; descripcion: string | null; padreId: string | null }): Promise<string> {
+    const [fila] = await this.db.insert(componentes).values({ tipo: "grupo", nombre, descripcion, padreId }).returning({ id: componentes.id });
+
+    if (!fila) {
+      throw new Error("Failed to create the permission group");
+    }
+
+    return fila.id;
+  }
+
+  async actualizarGrupo(id: string, campos: GrupoCampos): Promise<void> {
+    const cambios = {
+      ...(campos.nombre !== undefined && { nombre: campos.nombre }),
+      ...(campos.descripcion !== undefined && { descripcion: campos.descripcion }),
+      ...(campos.padreId !== undefined && { padreId: campos.padreId }),
+    };
+
+    if (Object.keys(cambios).length === 0) {
+      return;
+    }
+
+    await this.db.update(componentes).set(cambios).where(eq(componentes.id, id));
+  }
+
+  async reemplazarHijos(grupoId: string, hijoIds: readonly string[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(componentes)
+        .set({ padreId: null })
+        .where(and(eq(componentes.padreId, grupoId), hijoIds.length > 0 ? notInArray(componentes.id, [...hijoIds]) : undefined));
+
+      if (hijoIds.length > 0) {
+        await tx
+          .update(componentes)
+          .set({ padreId: grupoId })
+          .where(inArray(componentes.id, [...hijoIds]));
+      }
+    });
+  }
+
+  async eliminarGrupo(id: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [grupo] = await tx.select({ padreId: componentes.padreId }).from(componentes).where(eq(componentes.id, id));
+
+      if (!grupo) {
+        return;
+      }
+
+      await tx.update(componentes).set({ padreId: grupo.padreId }).where(eq(componentes.padreId, id));
+      await tx.delete(componentes).where(eq(componentes.id, id));
+    });
+  }
+
+  async contarPersonasConRaiz(componenteId: string): Promise<number> {
+    const [fila] = await this.db.select({ total: sql<number>`count(*)::int` }).from(personaComponentes).where(eq(personaComponentes.componenteId, componenteId));
+
+    return fila?.total ?? 0;
+  }
+
+  async listarPersonasConRaices(): Promise<PersonaRaices[]> {
+    const filas = await this.db
+      .select({
+        personaId: personas.id,
+        tipo: personas.tipo,
+        usuarioId: usuarios.id,
+        email: usuarios.email,
+        nombreCompleto: usuarios.nombreCompleto,
+        raizId: componentes.id,
+        raizNombre: componentes.nombre,
+        raizTipo: componentes.tipo,
+      })
+      .from(personas)
+      .innerJoin(usuarios, eq(usuarios.id, personas.usuarioId))
+      .leftJoin(personaComponentes, eq(personaComponentes.personaId, personas.id))
+      .leftJoin(componentes, eq(componentes.id, personaComponentes.componenteId))
+      .orderBy(usuarios.email, componentes.nombre);
+
+    // A Persona holds at least one root, but the join stays left so one that holds none is still listed.
+    const porPersona = new Map<string, PersonaRaices>();
+
+    for (const fila of filas) {
+      const persona = porPersona.get(fila.personaId) ?? {
+        personaId: fila.personaId,
+        tipo: fila.tipo,
+        usuario: { id: fila.usuarioId, email: fila.email, nombreCompleto: fila.nombreCompleto },
+        raices: [],
+      };
+
+      if (fila.raizId !== null && fila.raizNombre !== null && fila.raizTipo !== null) {
+        persona.raices.push({ id: fila.raizId, nombre: fila.raizNombre, tipo: fila.raizTipo });
+      }
+
+      porPersona.set(fila.personaId, persona);
+    }
+
+    return [...porPersona.values()];
+  }
+
+  async buscarPersona(personaId: string): Promise<PersonaFila | null> {
+    const [fila] = await this.db.select({ id: personas.id, tipo: personas.tipo }).from(personas).where(eq(personas.id, personaId));
+
+    return fila ?? null;
+  }
+
+  async raicesDePersona(personaId: string): Promise<string[]> {
+    const filas = await this.db.select({ componenteId: personaComponentes.componenteId }).from(personaComponentes).where(eq(personaComponentes.personaId, personaId));
+
+    return filas.map(({ componenteId }) => componenteId);
+  }
+
+  async removerRaiz(personaId: string, componenteId: string): Promise<void> {
+    await this.db.delete(personaComponentes).where(and(eq(personaComponentes.personaId, personaId), eq(personaComponentes.componenteId, componenteId)));
   }
 
   /** Orders definitions so that a group comes after its parent; a parent outside the list is assumed to exist already. */

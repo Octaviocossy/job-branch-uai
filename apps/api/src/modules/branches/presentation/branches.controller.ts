@@ -1,5 +1,7 @@
 import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { type CreateApplicationInput, type CreateFeedbackInput, type CreateHitoInput, createApplicationSchema, createFeedbackSchema, createHitoSchema } from "@repo/models";
+import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
+import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { ZodValidationPipe } from "../../../common/pipes/zod-validation.pipe";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
@@ -22,7 +24,7 @@ function parseArchived(value?: string): boolean | undefined {
   return value === "true";
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("branches")
 export class BranchesController {
   constructor(
@@ -36,11 +38,13 @@ export class BranchesController {
   ) {}
 
   @Get()
+  @RequiereAccion("branch.list")
   findAll(@CurrentUser() user: JwtPayload, @Query("archived") archived?: string) {
     return this.listBranchesUseCase.execute(user.sub, parseArchived(archived));
   }
 
   @Get(":id")
+  @RequiereAccion("branch.view")
   async findOne(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     const branch = await this.getBranchUseCase.execute(id, user.sub);
 
@@ -52,6 +56,7 @@ export class BranchesController {
   }
 
   @Post()
+  @RequiereAccion("branch.create")
   async create(@CurrentUser() user: JwtPayload, @Body(new ZodValidationPipe(createApplicationSchema)) body: CreateApplicationInput) {
     try {
       return await this.createBranchUseCase.execute(user.sub, body);
@@ -65,6 +70,7 @@ export class BranchesController {
   }
 
   @Post(":id/clone")
+  @RequiereAccion("branch.clone")
   async clone(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     const branch = await this.cloneBranchUseCase.execute(id, user.sub);
 
@@ -76,6 +82,7 @@ export class BranchesController {
   }
 
   @Post(":id/archive")
+  @RequiereAccion("branch.archive")
   async archive(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     const branch = await this.archiveBranchUseCase.execute(id, user.sub);
 
@@ -87,6 +94,7 @@ export class BranchesController {
   }
 
   @Post(":id/hitos")
+  @RequiereAccion("branch.addHito")
   async addHito(@CurrentUser() user: JwtPayload, @Param("id") id: string, @Body(new ZodValidationPipe(createHitoSchema)) body: CreateHitoInput) {
     try {
       const branch = await this.addHitoUseCase.execute(id, user.sub, body);
@@ -106,6 +114,7 @@ export class BranchesController {
   }
 
   @Post(":id/hitos/:hitoId/feedback")
+  @RequiereAccion("branch.addFeedback")
   async addFeedback(
     @CurrentUser() user: JwtPayload,
     @Param("id") id: string,

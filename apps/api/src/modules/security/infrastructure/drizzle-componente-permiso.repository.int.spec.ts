@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeTestDb, truncateAll } from "../../../../test/setup/db";
@@ -43,6 +44,22 @@ describe("DrizzleComponentePermisoRepository", () => {
 
   function codigos(nodo: ComponentePermiso): string[] {
     return nodo instanceof Accion ? [nodo.codigoAccion] : nodo.obtenerHijos().flatMap(codigos);
+  }
+
+  async function idDeAccion(codigoAccion: string): Promise<string> {
+    const [fila] = await db.select().from(componentes).where(eq(componentes.codigoAccion, codigoAccion));
+
+    if (!fila) {
+      throw new Error(`${codigoAccion} was not seeded`);
+    }
+
+    return fila.id;
+  }
+
+  async function padreDe(id: string): Promise<string | null | undefined> {
+    const [fila] = await db.select().from(componentes).where(eq(componentes.id, id));
+
+    return fila?.padreId;
   }
 
   beforeAll(async () => {
@@ -188,5 +205,269 @@ describe("DrizzleComponentePermisoRepository", () => {
     const resultado = await repo.listarPersonasSinRaices();
 
     expect(resultado).toEqual([{ personaId: sinRaices.id, tipo: "postulante" }]);
+  });
+
+  it("listarCatalogo returns every Modulo, Formulario and Accion, each Accion with the group that holds it", async () => {
+    await sincronizarCatalogo();
+    await db.update(componentes).set({ padreId: null }).where(eq(componentes.codigoAccion, "auth.me"));
+
+    const catalogo = await repo.listarCatalogo();
+
+    expect(catalogo.modulos).toHaveLength(MODULOS.length);
+    expect(catalogo.formularios).toHaveLength(FORMULARIOS.length);
+    expect(catalogo.acciones).toHaveLength(ACCIONES.length);
+    expect(catalogo.acciones.find((accion) => accion.codigoAccion === "branch.list")).toMatchObject({
+      nombre: "Listar ramas",
+      padreId: GRUPOS.PIPELINE_TABLERO.id,
+      padreNombre: "Tablero",
+    });
+    expect(catalogo.acciones.find((accion) => accion.codigoAccion === "auth.me")).toMatchObject({ padreId: null, padreNombre: null });
+    expect(catalogo.formularios.find((formulario) => formulario.nombre === "Tablero")?.moduloId).toBe(MODULOS.find((modulo) => modulo.nombre === "Pipeline")?.id);
+  });
+
+  it("listarGrupos returns the groups by name with their direct children and how many Personas hold them as a root", async () => {
+    await sincronizarCatalogo();
+    const primera = await crearPostulante("holder-1@example.com");
+    const segunda = await crearPostulante("holder-2@example.com");
+    await repo.asignarRaices(primera.id, [GRUPOS.PIPELINE.id, GRUPOS.CUENTA.id]);
+    await repo.asignarRaices(segunda.id, [GRUPOS.PIPELINE.id]);
+
+    const grupos = await repo.listarGrupos();
+
+    expect(grupos).toHaveLength(Object.values(GRUPOS).length);
+    expect(grupos.map((grupo) => grupo.nombre)).toEqual([...grupos.map((grupo) => grupo.nombre)].sort((a, b) => a.localeCompare(b, "es")));
+    const pipeline = grupos.find((grupo) => grupo.id === GRUPOS.PIPELINE.id);
+    expect(pipeline).toMatchObject({ padreId: null, personasConRaiz: 2 });
+    expect(pipeline?.hijos.map((hijo) => hijo.nombre)).toEqual(["Archivar rama", "Clonar rama", "Crear rama", "Hitos y feedback", "Tablero"]);
+    expect(pipeline?.hijos.every((hijo) => hijo.tipo === "grupo" && hijo.codigoAccion === null)).toBe(true);
+    const tablero = grupos.find((grupo) => grupo.id === GRUPOS.PIPELINE_TABLERO.id);
+    expect(tablero).toMatchObject({ padreId: GRUPOS.PIPELINE.id, personasConRaiz: 0 });
+    expect(tablero?.hijos.map((hijo) => [hijo.tipo, hijo.codigoAccion])).toEqual([
+      ["accion", "branch.list"],
+      ["accion", "branch.view"],
+    ]);
+    expect(grupos.find((grupo) => grupo.id === GRUPOS.CUENTA.id)?.personasConRaiz).toBe(1);
+  });
+
+  it("listarGrupos does not list an Accion as a group", async () => {
+    await sincronizarCatalogo();
+
+    const grupos = await repo.listarGrupos();
+
+    expect(grupos.some((grupo) => grupo.nombre === "Listar ramas")).toBe(false);
+  });
+
+  it("buscarComponente returns the tipo and parent of a component, and null for an unknown id", async () => {
+    await sincronizarCatalogo();
+
+    expect(await repo.buscarComponente(GRUPOS.PIPELINE_TABLERO.id)).toEqual({ id: GRUPOS.PIPELINE_TABLERO.id, tipo: "grupo", padreId: GRUPOS.PIPELINE.id });
+    expect(await repo.buscarComponente(await idDeAccion("branch.list"))).toMatchObject({ tipo: "accion", padreId: GRUPOS.PIPELINE_TABLERO.id });
+    expect(await repo.buscarComponente(randomUUID())).toBeNull();
+  });
+
+  it("ancestros returns the chain of parents, nearest first", async () => {
+    await sincronizarCatalogo();
+
+    expect(await repo.ancestros(await idDeAccion("branch.list"))).toEqual([GRUPOS.PIPELINE_TABLERO.id, GRUPOS.PIPELINE.id]);
+    expect(await repo.ancestros(GRUPOS.PIPELINE_TABLERO.id)).toEqual([GRUPOS.PIPELINE.id]);
+  });
+
+  it("ancestros returns nothing for a top-level group or an unknown id", async () => {
+    await sincronizarCatalogo();
+
+    expect(await repo.ancestros(GRUPOS.PIPELINE.id)).toEqual([]);
+    expect(await repo.ancestros(randomUUID())).toEqual([]);
+  });
+
+  it("ancestros stops on a cycle instead of walking it forever", async () => {
+    await sincronizarCatalogo();
+    await db.update(componentes).set({ padreId: GRUPOS.PIPELINE_TABLERO.id }).where(eq(componentes.id, GRUPOS.PIPELINE.id));
+
+    expect(await repo.ancestros(GRUPOS.PIPELINE_TABLERO.id)).toEqual([GRUPOS.PIPELINE.id, GRUPOS.PIPELINE_TABLERO.id]);
+  });
+
+  it("crearGrupo inserts an empty group and returns its id", async () => {
+    await sincronizarCatalogo();
+
+    const id = await repo.crearGrupo({ nombre: "Nuevo", descripcion: "Texto", padreId: GRUPOS.PIPELINE.id });
+
+    const [fila] = await db.select().from(componentes).where(eq(componentes.id, id));
+    expect(fila).toMatchObject({ tipo: "grupo", nombre: "Nuevo", descripcion: "Texto", padreId: GRUPOS.PIPELINE.id, codigoAccion: null, formularioId: null });
+  });
+
+  it("crearGrupo can insert a parentless group with no description", async () => {
+    await sincronizarCatalogo();
+
+    const id = await repo.crearGrupo({ nombre: "Suelto", descripcion: null, padreId: null });
+
+    expect(await padreDe(id)).toBeNull();
+  });
+
+  it("actualizarGrupo changes only the given fields", async () => {
+    await sincronizarCatalogo();
+
+    await repo.actualizarGrupo(GRUPOS.PIPELINE_TABLERO.id, { nombre: "Tablero editado" });
+
+    const [fila] = await db.select().from(componentes).where(eq(componentes.id, GRUPOS.PIPELINE_TABLERO.id));
+    expect(fila).toMatchObject({ nombre: "Tablero editado", descripcion: GRUPOS.PIPELINE_TABLERO.descripcion, padreId: GRUPOS.PIPELINE.id });
+  });
+
+  it("actualizarGrupo clears the description and the parent when given null", async () => {
+    await sincronizarCatalogo();
+
+    await repo.actualizarGrupo(GRUPOS.PIPELINE_TABLERO.id, { descripcion: null, padreId: null });
+
+    const [fila] = await db.select().from(componentes).where(eq(componentes.id, GRUPOS.PIPELINE_TABLERO.id));
+    expect(fila).toMatchObject({ descripcion: null, padreId: null });
+  });
+
+  it("actualizarGrupo moves a group under another one and ignores an empty change", async () => {
+    await sincronizarCatalogo();
+
+    await repo.actualizarGrupo(GRUPOS.PIPELINE_TABLERO.id, { padreId: GRUPOS.PERFILES.id });
+    await repo.actualizarGrupo(GRUPOS.PIPELINE_TABLERO.id, {});
+
+    expect(await padreDe(GRUPOS.PIPELINE_TABLERO.id)).toBe(GRUPOS.PERFILES.id);
+  });
+
+  it("reemplazarHijos moves a node out of its old group and into the new one", async () => {
+    await sincronizarCatalogo();
+    const listar = await idDeAccion("branch.list");
+    const nuevo = await repo.crearGrupo({ nombre: "Nuevo", descripcion: null, padreId: null });
+
+    await repo.reemplazarHijos(nuevo, [listar]);
+
+    expect(await padreDe(listar)).toBe(nuevo);
+    const tablero = (await repo.listarGrupos()).find((grupo) => grupo.id === GRUPOS.PIPELINE_TABLERO.id);
+    expect(tablero?.hijos.map((hijo) => hijo.codigoAccion)).toEqual(["branch.view"]);
+  });
+
+  it("reemplazarHijos orphans the children it leaves out and keeps the ones it lists", async () => {
+    await sincronizarCatalogo();
+    const listar = await idDeAccion("branch.list");
+    const ver = await idDeAccion("branch.view");
+
+    await repo.reemplazarHijos(GRUPOS.PIPELINE_TABLERO.id, [ver]);
+
+    expect(await padreDe(listar)).toBeNull();
+    expect(await padreDe(ver)).toBe(GRUPOS.PIPELINE_TABLERO.id);
+  });
+
+  it("reemplazarHijos with an empty list orphans every child of the group", async () => {
+    await sincronizarCatalogo();
+
+    await repo.reemplazarHijos(GRUPOS.PIPELINE_TABLERO.id, []);
+
+    expect((await repo.listarGrupos()).find((grupo) => grupo.id === GRUPOS.PIPELINE_TABLERO.id)?.hijos).toEqual([]);
+    expect(await padreDe(await idDeAccion("branch.list"))).toBeNull();
+  });
+
+  it("eliminarGrupo re-parents the children to the group's own parent, then deletes it", async () => {
+    await sincronizarCatalogo();
+    const listar = await idDeAccion("branch.list");
+
+    await repo.eliminarGrupo(GRUPOS.PIPELINE_TABLERO.id);
+
+    expect(await repo.buscarComponente(GRUPOS.PIPELINE_TABLERO.id)).toBeNull();
+    expect(await padreDe(listar)).toBe(GRUPOS.PIPELINE.id);
+  });
+
+  it("eliminarGrupo leaves the children of a top-level group parentless", async () => {
+    await sincronizarCatalogo();
+
+    await repo.eliminarGrupo(GRUPOS.PIPELINE.id);
+
+    expect(await repo.buscarComponente(GRUPOS.PIPELINE.id)).toBeNull();
+    expect(await padreDe(GRUPOS.PIPELINE_TABLERO.id)).toBeNull();
+  });
+
+  it("eliminarGrupo is a no-op for an unknown id", async () => {
+    await sincronizarCatalogo();
+    const antes = await contar(componentes);
+
+    await repo.eliminarGrupo(randomUUID());
+
+    expect(await contar(componentes)).toBe(antes);
+  });
+
+  it("contarPersonasConRaiz counts the Personas holding a component as a root", async () => {
+    await sincronizarCatalogo();
+    const primera = await crearPostulante("count-1@example.com");
+    const segunda = await crearPostulante("count-2@example.com");
+    await repo.asignarRaices(primera.id, [GRUPOS.CUENTA.id]);
+    await repo.asignarRaices(segunda.id, [GRUPOS.CUENTA.id, GRUPOS.PERFILES.id]);
+
+    expect(await repo.contarPersonasConRaiz(GRUPOS.CUENTA.id)).toBe(2);
+    expect(await repo.contarPersonasConRaiz(GRUPOS.PERFILES.id)).toBe(1);
+    expect(await repo.contarPersonasConRaiz(GRUPOS.ANALITICA.id)).toBe(0);
+  });
+
+  it("listarPersonasConRaices lists the Personas by email with their Usuario and their roots by name", async () => {
+    await sincronizarCatalogo();
+    const segunda = await crearPostulante("b-second@example.com");
+    const primera = await crearPostulante("a-first@example.com");
+    await repo.asignarRaices(segunda.id, [GRUPOS.PIPELINE.id]);
+    await repo.asignarRaices(primera.id, [GRUPOS.PERFILES.id, GRUPOS.CUENTA.id]);
+
+    const resultado = await repo.listarPersonasConRaices();
+
+    expect(resultado.map((persona) => persona.usuario.email)).toEqual(["a-first@example.com", "b-second@example.com"]);
+    expect(resultado[0]).toMatchObject({
+      personaId: primera.id,
+      tipo: "postulante",
+      usuario: { email: "a-first@example.com", nombreCompleto: "a-first@example.com" },
+      raices: [
+        { id: GRUPOS.CUENTA.id, nombre: "Cuenta", tipo: "grupo" },
+        { id: GRUPOS.PERFILES.id, nombre: "Perfiles CV", tipo: "grupo" },
+      ],
+    });
+    expect(resultado[1]?.raices).toEqual([{ id: GRUPOS.PIPELINE.id, nombre: "Pipeline", tipo: "grupo" }]);
+  });
+
+  it("listarPersonasConRaices still lists a Persona that holds no root", async () => {
+    await sincronizarCatalogo();
+    const persona = await crearPostulante("bare@example.com");
+
+    expect(await repo.listarPersonasConRaices()).toEqual([expect.objectContaining({ personaId: persona.id, raices: [] })]);
+  });
+
+  it("listarPersonasConRaices reports an Accion held directly as a root with the tipo accion", async () => {
+    await sincronizarCatalogo();
+    const persona = await crearPostulante("leaf-root@example.com");
+    await repo.asignarRaices(persona.id, [await idDeAccion("cv.upload")]);
+
+    const [resultado] = await repo.listarPersonasConRaices();
+
+    expect(resultado?.raices).toEqual([expect.objectContaining({ tipo: "accion" })]);
+  });
+
+  it("buscarPersona returns the Persona's id and tipo, and null for an unknown id", async () => {
+    await sincronizarCatalogo();
+    const persona = await crearPostulante("lookup@example.com");
+
+    expect(await repo.buscarPersona(persona.id)).toEqual({ id: persona.id, tipo: "postulante" });
+    expect(await repo.buscarPersona(randomUUID())).toBeNull();
+  });
+
+  it("raicesDePersona returns the ids of the roots a Persona holds", async () => {
+    await sincronizarCatalogo();
+    const persona = await crearPostulante("held@example.com");
+    await repo.asignarRaices(persona.id, [GRUPOS.CUENTA.id, GRUPOS.PERFILES.id]);
+
+    expect((await repo.raicesDePersona(persona.id)).sort()).toEqual([GRUPOS.CUENTA.id, GRUPOS.PERFILES.id].sort());
+    expect(await repo.raicesDePersona(randomUUID())).toEqual([]);
+  });
+
+  it("removerRaiz removes only that root of that Persona", async () => {
+    await sincronizarCatalogo();
+    const persona = await crearPostulante("drop@example.com");
+    const otra = await crearPostulante("keep@example.com");
+    await repo.asignarRaices(persona.id, [GRUPOS.CUENTA.id, GRUPOS.PERFILES.id]);
+    await repo.asignarRaices(otra.id, [GRUPOS.CUENTA.id]);
+
+    await repo.removerRaiz(persona.id, GRUPOS.CUENTA.id);
+
+    expect(await repo.raicesDePersona(persona.id)).toEqual([GRUPOS.PERFILES.id]);
+    expect(await repo.raicesDePersona(otra.id)).toEqual([GRUPOS.CUENTA.id]);
   });
 });

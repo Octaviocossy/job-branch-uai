@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { useFollowups } from "@/hooks/use-followups";
 import { useMarkFollowupDone } from "@/hooks/use-mark-followup-done";
+import { usePermissions } from "@/hooks/use-permissions";
 import { EResult, type FollowupItem, type FollowupUrgency } from "@/models";
 import { cn } from "@/utilities/tailwind.utility";
 
@@ -176,6 +177,7 @@ interface FollowupSectionProps {
 
 function FollowupSection({ title, subtitle, urgency, items, onDone }: FollowupSectionProps) {
   const config = URGENCY_CONFIG[urgency];
+  const { canDo } = usePermissions();
 
   return (
     <div>
@@ -224,13 +226,15 @@ function FollowupSection({ title, subtitle, urgency, items, onDone }: FollowupSe
             <div className="flex shrink-0 flex-col items-end gap-2">
               <span className={cn("font-mono text-xs font-semibold", config.color)}>{item.daysSince}d</span>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onDone(item.ramaId)}
-                  className="rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-emerald-400/40 hover:text-emerald-400"
-                >
-                  Hecho
-                </button>
+                {canDo("resolveFollowup") && (
+                  <button
+                    type="button"
+                    onClick={() => onDone(item.ramaId)}
+                    className="rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-emerald-400/40 hover:text-emerald-400"
+                  >
+                    Hecho
+                  </button>
+                )}
                 <Link href={`/branches/${item.ramaId}`} className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Link>

@@ -1,16 +1,24 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FollowupItem, FollowupListResponse } from "@/models";
 import { EResult } from "@/models";
+import { isolateLocalStorage } from "@/test/isolated-storage";
+import { ALL_POSTULANTE_CODES, sessionWith } from "@/test/session-fixture";
 import { renderWithClient } from "@/test/test-utils";
+import { clearAuthToken, setAuthToken } from "@/utilities/auth-token.utility";
 
 vi.mock("@/services/followup.service", () => ({
   followup_service: { list: vi.fn(), markDone: vi.fn() },
 }));
 
+import { auth_service } from "@/services/auth.service";
 import { followup_service } from "@/services/followup.service";
 import { FollowupView } from "./followup-view";
+
+vi.mock("@/services/auth.service", () => ({
+  auth_service: { me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() },
+}));
 
 const CRITICAL_ITEM: FollowupItem = {
   ramaId: "r1",
@@ -46,6 +54,18 @@ const AFTER_DONE_RESPONSE: FollowupListResponse = {
 };
 
 describe("FollowupView", () => {
+  isolateLocalStorage();
+
+  beforeEach(() => {
+    vi.mocked(auth_service.me).mockReset();
+    vi.mocked(auth_service.me).mockResolvedValue({ type: EResult.SUCCESS, value: sessionWith(ALL_POSTULANTE_CODES), status: 200 });
+    setAuthToken("test-token");
+  });
+
+  afterEach(() => {
+    clearAuthToken();
+  });
+
   it("groups active branches by urgency, shows the recruiter contact, and removes a row once marked done", async () => {
     const user = userEvent.setup();
     vi.mocked(followup_service.list)
@@ -64,7 +84,7 @@ describe("FollowupView", () => {
     expect(screen.getByText("Laura García")).toBeInTheDocument();
     expect(screen.getByText("Ghosting crítico")).toBeInTheDocument();
 
-    const [criticalDoneButton] = screen.getAllByRole("button", { name: "Hecho" });
+    const [criticalDoneButton] = await screen.findAllByRole("button", { name: "Hecho" });
     if (!criticalDoneButton) {
       throw new Error("expected a Hecho button to be rendered");
     }

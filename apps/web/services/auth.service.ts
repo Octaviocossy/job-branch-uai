@@ -7,4 +7,6 @@ export const auth_service = {
   login: (input: LoginInput): Promise<TResult<AuthResponse>> => api.post<LoginInput, AuthResponse>("/auth/login", input),
 
   me: (signal?: AbortSignal): Promise<TResult<MeResponse>> => api.get<MeResponse>("/auth/me", undefined, signal),
+
+  logout: (): Promise<TResult<void>> => api.post<undefined, void>("/auth/logout", undefined),
 };

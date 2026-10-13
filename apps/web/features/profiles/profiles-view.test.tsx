@@ -1,8 +1,11 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EResult } from "@/models";
+import { isolateLocalStorage } from "@/test/isolated-storage";
+import { ALL_POSTULANTE_CODES, sessionWith } from "@/test/session-fixture";
 import { renderWithClient } from "@/test/test-utils";
+import { clearAuthToken, setAuthToken } from "@/utilities/auth-token.utility";
 
 vi.mock("@/services/cv-versions.service", () => ({
   cv_versions_service: {
@@ -15,7 +18,12 @@ vi.mock("@/services/cv-versions.service", () => ({
 }));
 
 import { ProfilesView } from "@/features/profiles/profiles-view";
+import { auth_service } from "@/services/auth.service";
 import { cv_versions_service } from "@/services/cv-versions.service";
+
+vi.mock("@/services/auth.service", () => ({
+  auth_service: { me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() },
+}));
 
 const disponible = {
   id: "cv1",
@@ -40,9 +48,18 @@ const seleccionadoSalida = {
 };
 
 describe("ProfilesView", () => {
+  isolateLocalStorage();
+
   beforeEach(() => {
     vi.mocked(cv_versions_service.list).mockReset();
     vi.mocked(cv_versions_service.setOutputProfile).mockReset();
+    vi.mocked(auth_service.me).mockReset();
+    vi.mocked(auth_service.me).mockResolvedValue({ type: EResult.SUCCESS, value: sessionWith(ALL_POSTULANTE_CODES), status: 200 });
+    setAuthToken("test-token");
+  });
+
+  afterEach(() => {
+    clearAuthToken();
   });
 
   it("renders the best performer callout and each version's ROI", async () => {

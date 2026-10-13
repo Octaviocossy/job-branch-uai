@@ -10,6 +10,7 @@ import { useAddHito } from "@/hooks/use-add-hito";
 import { useApplication } from "@/hooks/use-application";
 import { useArchiveApplication } from "@/hooks/use-archive-application";
 import { useCloneApplication } from "@/hooks/use-clone-application";
+import { usePermissions } from "@/hooks/use-permissions";
 import { type Application, type ApplicationStatus, EResult, PIPELINE_STAGES } from "@/models";
 import { differenceInDays } from "@/utilities/date.utility";
 import { cn } from "@/utilities/tailwind.utility";
@@ -48,6 +49,7 @@ function BranchDetail({ app }: { app: Application }) {
   const daysSinceUpdate = differenceInDays(new Date(), new Date(app.lastUpdated));
   const cloneApplication = useCloneApplication();
   const archiveApplication = useArchiveApplication();
+  const { canDo } = usePermissions();
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
@@ -91,14 +93,18 @@ function BranchDetail({ app }: { app: Application }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" disabled={cloneApplication.isPending} onClick={() => cloneApplication.mutate(app.id)}>
-              {cloneApplication.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-              Clonar
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" disabled={archiveApplication.isPending || app.archived} onClick={() => archiveApplication.mutate(app.id)}>
-              {archiveApplication.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-              Archivar
-            </Button>
+            {canDo("cloneBranch") && (
+              <Button variant="outline" size="sm" className="gap-1.5" disabled={cloneApplication.isPending} onClick={() => cloneApplication.mutate(app.id)}>
+                {cloneApplication.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                Clonar
+              </Button>
+            )}
+            {canDo("archiveBranch") && (
+              <Button variant="outline" size="sm" className="gap-1.5" disabled={archiveApplication.isPending || app.archived} onClick={() => archiveApplication.mutate(app.id)}>
+                {archiveApplication.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                Archivar
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -260,10 +266,11 @@ function AddHitoForm({ app }: { app: Application }) {
   const [status, setStatus] = useState<ApplicationStatus>("Enviado");
   const [note, setNote] = useState("");
   const addHito = useAddHito();
+  const { canDo } = usePermissions();
 
   const isTerminal = TERMINAL_STATUSES.includes(app.status);
 
-  if (isTerminal) {
+  if (isTerminal || !canDo("addHito")) {
     return null;
   }
 

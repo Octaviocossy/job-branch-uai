@@ -9,5 +9,6 @@ export * from "./modulos.schema";
 export * from "./persona-componentes.schema";
 export * from "./personas.schema";
 export * from "./recordatorios.schema";
+export * from "./sesiones.schema";
 export * from "./usuarios.schema";
 export * from "./vacantes.schema";

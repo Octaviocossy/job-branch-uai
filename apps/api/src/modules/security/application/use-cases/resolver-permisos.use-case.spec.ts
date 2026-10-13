@@ -1,21 +1,11 @@
 import type { Persona } from "@repo/models";
 import { describe, expect, it, vi } from "vitest";
-import type { AppLogger } from "../../../../shared/logger/app.logger";
+import { makeComponenteRepository, makeLogger } from "../../../../../test/setup/doubles";
 import type { PersonaRepository } from "../../../persona/domain/persona.repository";
 import { Accion } from "../../domain/accion";
-import type { ComponentePermisoRepository } from "../../domain/componente-permiso.repository";
 import { ContextoSeguridad } from "../../domain/contexto-seguridad";
 import { GrupoPermisos } from "../../domain/grupo-permisos";
 import { ResolverPermisosUseCase } from "./resolver-permisos.use-case";
-
-const makeLogger = () =>
-  ({
-    setContext: vi.fn(),
-    log: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }) as unknown as AppLogger;
 
 const PERSONA: Persona = { id: "p1", usuarioId: "u1", puestoCorporativo: null, tipo: "postulante", habilidadesMaster: [] };
 
@@ -25,15 +15,7 @@ const makePersonaRepository = (persona: Persona | null) =>
     findByUsuarioId: vi.fn().mockResolvedValue(persona),
   }) as unknown as PersonaRepository;
 
-const makeComponenteRepository = (raices: GrupoPermisos[] = []) =>
-  ({
-    sincronizarModulosYFormularios: vi.fn(),
-    asegurarGrupos: vi.fn(),
-    sincronizarAcciones: vi.fn(),
-    findArbolByPersona: vi.fn().mockResolvedValue(raices),
-    asignarRaices: vi.fn(),
-    listarPersonasSinRaices: vi.fn(),
-  }) as unknown as ComponentePermisoRepository;
+const repositoryCon = (raices: GrupoPermisos[] = []) => makeComponenteRepository({ findArbolByPersona: vi.fn().mockResolvedValue(raices) });
 
 function grupoCon(id: string, ...codigos: string[]): GrupoPermisos {
   const grupo = new GrupoPermisos(id, id);
@@ -47,7 +29,7 @@ function grupoCon(id: string, ...codigos: string[]): GrupoPermisos {
 
 describe("ResolverPermisosUseCase", () => {
   it("loads the Persona of the Usuario and wraps its roots in one transient group", async () => {
-    const componenteRepository = makeComponenteRepository([grupoCon("cuenta", "auth.me"), grupoCon("pipeline", "branch.create")]);
+    const componenteRepository = repositoryCon([grupoCon("cuenta", "auth.me"), grupoCon("pipeline", "branch.create")]);
     const personaRepository = makePersonaRepository(PERSONA);
     const useCase = new ResolverPermisosUseCase(personaRepository, componenteRepository, makeLogger());
 
@@ -62,7 +44,7 @@ describe("ResolverPermisosUseCase", () => {
   });
 
   it("grants nothing beyond the Persona's roots", async () => {
-    const useCase = new ResolverPermisosUseCase(makePersonaRepository(PERSONA), makeComponenteRepository([grupoCon("cuenta", "auth.me")]), makeLogger());
+    const useCase = new ResolverPermisosUseCase(makePersonaRepository(PERSONA), repositoryCon([grupoCon("cuenta", "auth.me")]), makeLogger());
 
     const contexto = new ContextoSeguridad(await useCase.execute("u1"));
 
@@ -71,7 +53,7 @@ describe("ResolverPermisosUseCase", () => {
   });
 
   it("returns an empty group, denying everything, when the Persona holds no roots", async () => {
-    const useCase = new ResolverPermisosUseCase(makePersonaRepository(PERSONA), makeComponenteRepository([]), makeLogger());
+    const useCase = new ResolverPermisosUseCase(makePersonaRepository(PERSONA), repositoryCon([]), makeLogger());
 
     const arbol = await useCase.execute("u1");
 
@@ -81,7 +63,7 @@ describe("ResolverPermisosUseCase", () => {
 
   it("logs a warning and returns an empty group when the Usuario has no Persona", async () => {
     const logger = makeLogger();
-    const componenteRepository = makeComponenteRepository();
+    const componenteRepository = repositoryCon();
     const useCase = new ResolverPermisosUseCase(makePersonaRepository(null), componenteRepository, logger);
 
     const arbol = await useCase.execute("u-orphan");
@@ -95,7 +77,7 @@ describe("ResolverPermisosUseCase", () => {
   it("sets the logger context to its own class name", () => {
     const logger = makeLogger();
 
-    new ResolverPermisosUseCase(makePersonaRepository(null), makeComponenteRepository(), logger);
+    new ResolverPermisosUseCase(makePersonaRepository(null), repositoryCon(), logger);
 
     expect(logger.setContext).toHaveBeenCalledWith("ResolverPermisosUseCase");
   });

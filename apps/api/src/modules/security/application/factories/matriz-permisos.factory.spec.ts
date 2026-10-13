@@ -1,19 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { makeComponenteRepository } from "../../../../../test/setup/doubles";
 import { ACCIONES, GRUPOS, type GrupoDefinicion } from "../../domain/catalogo-matriz";
-import type { ComponentePermisoRepository } from "../../domain/componente-permiso.repository";
 import { ContextoSeguridad } from "../../domain/contexto-seguridad";
 import { GrupoPermisos } from "../../domain/grupo-permisos";
 import { AdministradorMatrizFactory, crearFactories, type MatrizPermisosFactory, PostulanteMatrizFactory, RecruiterMatrizFactory } from "./matriz-permisos.factory";
-
-const makeRepository = () =>
-  ({
-    sincronizarModulosYFormularios: vi.fn(),
-    asegurarGrupos: vi.fn(),
-    sincronizarAcciones: vi.fn(),
-    findArbolByPersona: vi.fn(),
-    asignarRaices: vi.fn(),
-    listarPersonasSinRaices: vi.fn(),
-  }) as unknown as ComponentePermisoRepository;
 
 const CODIGOS = ACCIONES.map((accion) => accion.codigoAccion);
 
@@ -48,7 +38,7 @@ const POSTULANTE_ACCIONES_PREVIAS = [
 ];
 
 describe("PostulanteMatrizFactory", () => {
-  const factory = new PostulanteMatrizFactory(makeRepository());
+  const factory = new PostulanteMatrizFactory(makeComponenteRepository());
 
   it("keeps the 9 codes the Postulante had before the persisted matrix", () => {
     const acciones = accionesDe(factory);
@@ -82,7 +72,7 @@ describe("PostulanteMatrizFactory", () => {
 });
 
 describe("RecruiterMatrizFactory", () => {
-  const factory = new RecruiterMatrizFactory(makeRepository());
+  const factory = new RecruiterMatrizFactory(makeComponenteRepository());
 
   it("holds every branch.*, followup.*, analytics.overview, auth.* and security.viewMatrix code", () => {
     expect(accionesDe(factory)).toEqual(conPrefijo("auth.", "security.viewMatrix", "branch.", "followup.", "analytics.").sort());
@@ -101,7 +91,7 @@ describe("RecruiterMatrizFactory", () => {
 });
 
 describe("AdministradorMatrizFactory", () => {
-  const factory = new AdministradorMatrizFactory(makeRepository());
+  const factory = new AdministradorMatrizFactory(makeComponenteRepository());
 
   it("holds auth.*, security.* and usuario.* only", () => {
     expect(accionesDe(factory)).toEqual(conPrefijo("auth.", "security.", "usuario.").sort());
@@ -114,7 +104,7 @@ describe("AdministradorMatrizFactory", () => {
 
 describe("MatrizPermisosFactory", () => {
   it("crearFactories builds one factory per role, each reporting its own tipo", () => {
-    const factories = crearFactories(makeRepository());
+    const factories = crearFactories(makeComponenteRepository());
 
     expect(factories.postulante).toBeInstanceOf(PostulanteMatrizFactory);
     expect(factories.recruiter).toBeInstanceOf(RecruiterMatrizFactory);
@@ -127,7 +117,7 @@ describe("MatrizPermisosFactory", () => {
   });
 
   it("reaches every default group through at least one factory's roots", () => {
-    const factories = Object.values(crearFactories(makeRepository()));
+    const factories = Object.values(crearFactories(makeComponenteRepository()));
     const grupos: GrupoDefinicion[] = Object.values(GRUPOS);
     const raices = new Set(factories.flatMap((factory) => factory.raicesPorDefecto()));
     const alcanzado = (grupo: GrupoDefinicion): boolean => raices.has(grupo.id) || grupos.some((padre) => padre.id === grupo.padreId && alcanzado(padre));
@@ -138,14 +128,14 @@ describe("MatrizPermisosFactory", () => {
   });
 
   it("reaches every Accion through at least one factory", () => {
-    const factories = Object.values(crearFactories(makeRepository()));
+    const factories = Object.values(crearFactories(makeComponenteRepository()));
     const alcanzadas = new Set(factories.flatMap(accionesDe));
 
     expect([...alcanzadas].sort()).toEqual([...CODIGOS].sort());
   });
 
   it("otorgarRaices hands the Persona the role's default root ids", async () => {
-    const repository = makeRepository();
+    const repository = makeComponenteRepository();
     const factory = new RecruiterMatrizFactory(repository);
 
     await factory.otorgarRaices("persona-1");
@@ -154,7 +144,7 @@ describe("MatrizPermisosFactory", () => {
   });
 
   it("sembrar seeds the role's root groups together with every descendant group", async () => {
-    const repository = makeRepository();
+    const repository = makeComponenteRepository();
 
     await new PostulanteMatrizFactory(repository).sembrar();
 
@@ -178,7 +168,7 @@ describe("MatrizPermisosFactory", () => {
   });
 
   it("sembrar never writes anything but groups", async () => {
-    const repository = makeRepository();
+    const repository = makeComponenteRepository();
 
     await new AdministradorMatrizFactory(repository).sembrar();
 

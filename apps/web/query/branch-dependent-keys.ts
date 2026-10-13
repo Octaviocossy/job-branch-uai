@@ -13,12 +13,7 @@ import type { QueryClient } from "@tanstack/react-query";
  * counts until `staleTime` (30s) lapses. See
  * `.agents/plans/2026-07-14-fix-branch-actions-stale-profiles-cache.md`.
  */
-export const BRANCH_DEPENDENT_QUERY_KEYS = [
-  ["applications"],
-  ["cv-versions"],
-  ["analytics", "overview"],
-  ["followup"],
-] as const;
+export const BRANCH_DEPENDENT_QUERY_KEYS = [["applications"], ["cv-versions"], ["analytics", "overview"], ["followup"]] as const;
 
 export const invalidateBranchDependentQueries = (queryClient: QueryClient): void => {
   for (const queryKey of BRANCH_DEPENDENT_QUERY_KEYS) {

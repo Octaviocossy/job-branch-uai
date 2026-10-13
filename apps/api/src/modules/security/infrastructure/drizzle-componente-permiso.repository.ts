@@ -4,10 +4,12 @@ import { DRIZZLE } from "../../../database/database.constants";
 import type { Database } from "../../../database/database.module";
 import { componentes, formularios, modulos, personaComponentes, personas } from "../../../database/schema/index";
 import { Accion } from "../domain/accion";
-import type { AccionDefinicion, FormularioDefinicion, GrupoDefinicion, ModuloDefinicion } from "../domain/catalogo-matriz";
+import type { AccionDefinicion, GrupoDefinicion } from "../domain/catalogo-matriz";
 import type { ComponentePermiso } from "../domain/componente-permiso";
 import type { ComponentePermisoRepository, PersonaSinRaices } from "../domain/componente-permiso.repository";
+import type { Formulario } from "../domain/formulario";
 import { GrupoPermisos } from "../domain/grupo-permisos";
+import type { Modulo } from "../domain/modulo";
 
 type ComponenteRow = typeof componentes.$inferSelect;
 
@@ -15,7 +17,7 @@ type ComponenteRow = typeof componentes.$inferSelect;
 export class DrizzleComponentePermisoRepository implements ComponentePermisoRepository {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async sincronizarModulosYFormularios(definicionesModulos: readonly ModuloDefinicion[], definicionesFormularios: readonly FormularioDefinicion[]): Promise<void> {
+  async sincronizarModulosYFormularios(definicionesModulos: readonly Modulo[], definicionesFormularios: readonly Formulario[]): Promise<void> {
     if (definicionesModulos.length > 0) {
       await this.db
         .insert(modulos)

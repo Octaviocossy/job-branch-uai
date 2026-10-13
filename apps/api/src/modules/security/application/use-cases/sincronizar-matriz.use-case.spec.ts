@@ -1,29 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppLogger } from "../../../../shared/logger/app.logger";
+import { makeComponenteRepository, makeLogger } from "../../../../../test/setup/doubles";
 import { ACCIONES, FORMULARIOS, MODULOS } from "../../domain/catalogo-matriz";
-import type { ComponentePermisoRepository } from "../../domain/componente-permiso.repository";
 import type { MatrizPermisosFactories, MatrizPermisosFactory } from "../factories/matriz-permisos.factory";
 import { SincronizarMatrizUseCase } from "./sincronizar-matriz.use-case";
-
-const makeLogger = () =>
-  ({
-    setContext: vi.fn(),
-    log: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }) as unknown as AppLogger;
-
-const makeRepository = (overrides: Partial<ComponentePermisoRepository> = {}) =>
-  ({
-    sincronizarModulosYFormularios: vi.fn().mockResolvedValue(undefined),
-    asegurarGrupos: vi.fn(),
-    sincronizarAcciones: vi.fn().mockResolvedValue(undefined),
-    findArbolByPersona: vi.fn(),
-    asignarRaices: vi.fn(),
-    listarPersonasSinRaices: vi.fn().mockResolvedValue([]),
-    ...overrides,
-  }) as unknown as ComponentePermisoRepository;
 
 const makeFactory = (tipo: MatrizPermisosFactory["tipo"]) =>
   ({
@@ -42,7 +21,7 @@ const makeFactories = (): MatrizPermisosFactories => ({
 
 describe("SincronizarMatrizUseCase", () => {
   it("syncs modulos and formularios, seeds every role's groups, then syncs the acciones", async () => {
-    const repository = makeRepository();
+    const repository = makeComponenteRepository();
     const factories = makeFactories();
 
     await new SincronizarMatrizUseCase(repository, factories, makeLogger()).execute();
@@ -60,7 +39,7 @@ describe("SincronizarMatrizUseCase", () => {
   });
 
   it("hands each Persona without roots the default roots of its own role, and nobody else", async () => {
-    const repository = makeRepository({
+    const repository = makeComponenteRepository({
       listarPersonasSinRaices: vi.fn().mockResolvedValue([
         { personaId: "p-post", tipo: "postulante" },
         { personaId: "p-rec", tipo: "recruiter" },
@@ -77,7 +56,7 @@ describe("SincronizarMatrizUseCase", () => {
   });
 
   it("reconciles Personas only after the acciones are synced", async () => {
-    const repository = makeRepository({ listarPersonasSinRaices: vi.fn().mockResolvedValue([{ personaId: "p-post", tipo: "postulante" }]) });
+    const repository = makeComponenteRepository({ listarPersonasSinRaices: vi.fn().mockResolvedValue([{ personaId: "p-post", tipo: "postulante" }]) });
     const factories = makeFactories();
 
     await new SincronizarMatrizUseCase(repository, factories, makeLogger()).execute();
@@ -90,7 +69,7 @@ describe("SincronizarMatrizUseCase", () => {
   it("hands nobody roots when every Persona already holds some", async () => {
     const factories = makeFactories();
 
-    await new SincronizarMatrizUseCase(makeRepository(), factories, makeLogger()).execute();
+    await new SincronizarMatrizUseCase(makeComponenteRepository(), factories, makeLogger()).execute();
 
     for (const factory of Object.values(factories)) {
       expect(factory.otorgarRaices).not.toHaveBeenCalled();
@@ -100,14 +79,14 @@ describe("SincronizarMatrizUseCase", () => {
   it("logs the counts and sets the logger context to its own class name", async () => {
     const logger = makeLogger();
 
-    await new SincronizarMatrizUseCase(makeRepository(), makeFactories(), logger).execute();
+    await new SincronizarMatrizUseCase(makeComponenteRepository(), makeFactories(), logger).execute();
 
     expect(logger.setContext).toHaveBeenCalledWith("SincronizarMatrizUseCase");
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining(`${ACCIONES.length} acciones`));
   });
 
   it("propagates a failing step instead of swallowing it", async () => {
-    const repository = makeRepository({ sincronizarAcciones: vi.fn().mockRejectedValue(new Error("db down")) });
+    const repository = makeComponenteRepository({ sincronizarAcciones: vi.fn().mockRejectedValue(new Error("db down")) });
 
     await expect(new SincronizarMatrizUseCase(repository, makeFactories(), makeLogger()).execute()).rejects.toThrow("db down");
   });

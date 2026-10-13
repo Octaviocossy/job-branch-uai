@@ -6,7 +6,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 describe("catalogo-matriz", () => {
   const grupos = Object.values(GRUPOS);
 
-  it("holds exactly 29 Acciones, one per protected endpoint", () => {
+  it("holds exactly 29 Acciones, seeded ahead of the protected endpoints that do not exist yet", () => {
     expect(ACCIONES).toHaveLength(29);
   });
 
@@ -66,9 +66,12 @@ describe("catalogo-matriz", () => {
     expect(new Set(nombres).size).toBe(nombres.length);
   });
 
-  it("traces every Accion to a use case", () => {
+  it("traces every Accion to at least one use case, written CU-nn", () => {
     for (const accion of ACCIONES) {
-      expect(accion.cu, accion.codigoAccion).toMatch(/^CU-\d{2}/);
+      expect(accion.cu.length, accion.codigoAccion).toBeGreaterThan(0);
+      for (const cu of accion.cu) {
+        expect(cu, accion.codigoAccion).toMatch(/^CU-\d{2}$/);
+      }
     }
   });
 });

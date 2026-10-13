@@ -56,16 +56,18 @@ abstract class MatrizPermisosFactoryBase implements MatrizPermisosFactory {
     return grupo;
   }
 
-  private conDescendientes(grupo: GrupoDefinicion): GrupoDefinicion[] {
-    const hijos = TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === grupo.id);
+  private subgruposDe(grupo: GrupoDefinicion): GrupoDefinicion[] {
+    return TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === grupo.id);
+  }
 
-    return [grupo, ...hijos.flatMap((hijo) => this.conDescendientes(hijo))];
+  private conDescendientes(grupo: GrupoDefinicion): GrupoDefinicion[] {
+    return [grupo, ...this.subgruposDe(grupo).flatMap((subgrupo) => this.conDescendientes(subgrupo))];
   }
 
   private construirGrupo(definicion: GrupoDefinicion): GrupoPermisos {
     const grupo = new GrupoPermisos(definicion.id, definicion.nombre, definicion.descripcion);
 
-    for (const subgrupo of TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === definicion.id)) {
+    for (const subgrupo of this.subgruposDe(definicion)) {
       grupo.agregar(this.construirGrupo(subgrupo));
     }
 

@@ -56,9 +56,8 @@ export async function crearAdministrador(app: INestApplication, email: string, p
   const factories = app.get<MatrizPermisosFactories>(MATRIZ_PERMISOS_FACTORIES, { strict: false });
 
   const usuario = await listaUsuarios.agregarUsuario({ email, nombreCompleto: "Administrador de Prueba", passwordHash: await passwordService.hash(password) });
-  const persona = await createPersonaUseCase.execute({ tipo: "administrador", usuarioId: usuario.id, puestoCorporativo: null });
 
-  await factories.administrador.otorgarRaices(persona.id);
+  await createPersonaUseCase.execute({ tipo: "administrador", usuarioId: usuario.id, puestoCorporativo: null }, factories.administrador.raicesPorDefecto());
 
   return usuario;
 }

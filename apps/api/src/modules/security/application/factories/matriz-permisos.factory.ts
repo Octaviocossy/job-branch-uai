@@ -7,7 +7,11 @@ import { GrupoPermisos } from "../../domain/grupo-permisos";
 
 export const MATRIZ_PERMISOS_FACTORIES = Symbol("MATRIZ_PERMISOS_FACTORIES");
 
-/** Abstract Factory, one per role: defines the role's default roots, seeds their shared groups and hands them to a Persona. */
+/**
+ * Abstract Factory, one per role: defines the role's default roots, seeds their shared groups and hands them to a Persona.
+ * A new Persona is created holding `raicesPorDefecto()` in one transaction (invariant 12); `otorgarRaices` is the
+ * reconcile path for a Persona found holding none.
+ */
 export interface MatrizPermisosFactory {
   readonly tipo: PersonaTipo;
   /** The role's default roots: ids of shared default groups. */
@@ -16,7 +20,7 @@ export interface MatrizPermisosFactory {
   crear(): ComponentePermiso[];
   /** Seeds this role's shared default groups (and their subgroups) when missing. */
   sembrar(): Promise<void>;
-  /** Hands a Persona this role's default roots. */
+  /** Hands an existing Persona this role's default roots; ignores the ones it already holds. */
   otorgarRaices(personaId: string): Promise<void>;
 }
 

@@ -44,33 +44,31 @@ export class RegisterUseCase {
     // Emit AFTER persistence succeeds — never before (see §7).
     this.eventEmitter.emit(USER_CREATED_EVENT, { user });
 
+    // The Persona is created holding its role's default roots, in one transaction: it never exists without roots
+    // (invariant 12), and when the grant fails no Persona is left behind and no token is signed.
+    const raices = this.factories[input.role].raicesPorDefecto();
     const persona =
       input.role === "recruiter"
-        ? await this.createPersonaUseCase.execute({
-            tipo: "recruiter",
-            usuarioId: usuario.id,
-            puestoCorporativo: null,
-            perNombre: input.nombreCompleto,
-            perApellido: "",
-            fechaContratacion: new Date().toISOString().slice(0, 10),
-          })
-        : await this.createPersonaUseCase.execute({
-            tipo: "postulante",
-            usuarioId: usuario.id,
-            puestoCorporativo: null,
-            habilidadesMaster: [],
-          });
-
-    // The role's factory hands the new Persona its default roots; its tree is loaded from the database from now on.
-    // This is not atomic with the Persona's creation, by design: when it fails the Persona holds no roots, which
-    // denies everything, until the next boot's `SincronizarMatrizUseCase` hands it its role's default roots
-    // (derived decision 32, invariant 12). No token is signed meanwhile, so nothing runs on the empty tree.
-    try {
-      await this.factories[persona.tipo].otorgarRaices(persona.id);
-    } catch (error) {
-      this.logger.error(`Default roots not handed out, the Persona holds none until the next matrix sync personaId=${persona.id}`);
-      throw error;
-    }
+        ? await this.createPersonaUseCase.execute(
+            {
+              tipo: "recruiter",
+              usuarioId: usuario.id,
+              puestoCorporativo: null,
+              perNombre: input.nombreCompleto,
+              perApellido: "",
+              fechaContratacion: new Date().toISOString().slice(0, 10),
+            },
+            raices,
+          )
+        : await this.createPersonaUseCase.execute(
+            {
+              tipo: "postulante",
+              usuarioId: usuario.id,
+              puestoCorporativo: null,
+              habilidadesMaster: [],
+            },
+            raices,
+          );
 
     const token = this.jwtService.sign({ sub: usuario.id, role: persona.tipo });
 

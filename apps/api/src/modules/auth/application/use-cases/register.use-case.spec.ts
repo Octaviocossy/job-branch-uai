@@ -36,11 +36,13 @@ const makeCreatePersonaUseCase = (created: Persona) =>
     execute: vi.fn().mockResolvedValue(created),
   }) as unknown as CreatePersonaUseCase;
 
+const RAICES = { postulante: ["root-postulante"], recruiter: ["root-recruiter"], administrador: ["root-administrador"] };
+
 const makeFactories = () =>
   ({
-    postulante: { otorgarRaices: vi.fn().mockResolvedValue(undefined) },
-    recruiter: { otorgarRaices: vi.fn().mockResolvedValue(undefined) },
-    administrador: { otorgarRaices: vi.fn().mockResolvedValue(undefined) },
+    postulante: { raicesPorDefecto: vi.fn().mockReturnValue(RAICES.postulante) },
+    recruiter: { raicesPorDefecto: vi.fn().mockReturnValue(RAICES.recruiter) },
+    administrador: { raicesPorDefecto: vi.fn().mockReturnValue(RAICES.administrador) },
   }) as unknown as MatrizPermisosFactories;
 
 describe("RegisterUseCase", () => {
@@ -91,16 +93,19 @@ describe("RegisterUseCase", () => {
     expect(jwtService.sign).toHaveBeenCalledWith({ sub: "u1", role: "postulante" });
     expect(eventEmitter.emit).toHaveBeenCalledWith(USER_CREATED_EVENT, { user });
     expect(createPersonaUseCase.execute).toHaveBeenCalledTimes(1);
-    expect(createPersonaUseCase.execute).toHaveBeenCalledWith({
-      tipo: "postulante",
-      usuarioId: "u1",
-      puestoCorporativo: null,
-      habilidadesMaster: [],
-    });
+    expect(createPersonaUseCase.execute).toHaveBeenCalledWith(
+      {
+        tipo: "postulante",
+        usuarioId: "u1",
+        puestoCorporativo: null,
+        habilidadesMaster: [],
+      },
+      RAICES.postulante,
+    );
     expect(result).toEqual({ token: "signed.jwt", user });
   });
 
-  it("hands the new postulante Persona its role's default roots, and only that role's factory is called", async () => {
+  it("creates the Persona holding its role's default roots in that one call, and no other role's", async () => {
     const created = new Usuario("u1", "a@b.com", "A", "hashed", "native", 0, null);
     const lista = makeLista({
       buscarPorEmail: vi.fn().mockResolvedValue(null),
@@ -114,12 +119,12 @@ describe("RegisterUseCase", () => {
 
     await useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" });
 
-    expect(factories.postulante.otorgarRaices).toHaveBeenCalledExactlyOnceWith("p1");
-    expect(factories.recruiter.otorgarRaices).not.toHaveBeenCalled();
-    expect(factories.administrador.otorgarRaices).not.toHaveBeenCalled();
+    expect(createPersonaUseCase.execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tipo: "postulante" }), RAICES.postulante);
+    expect(factories.recruiter.raicesPorDefecto).not.toHaveBeenCalled();
+    expect(factories.administrador.raicesPorDefecto).not.toHaveBeenCalled();
   });
 
-  it("does not sign a token when handing out the roots fails", async () => {
+  it("does not sign a token when the Persona and its roots cannot be created", async () => {
     const created = new Usuario("u1", "a@b.com", "A", "hashed", "native", 0, null);
     const lista = makeLista({
       buscarPorEmail: vi.fn().mockResolvedValue(null),
@@ -127,15 +132,11 @@ describe("RegisterUseCase", () => {
     });
     const passwordService = { hash: vi.fn().mockResolvedValue("hashed"), compare: vi.fn() } as unknown as PasswordService;
     const jwtService = { sign: vi.fn(), verify: vi.fn() } as unknown as JwtService;
-    const createPersonaUseCase = makeCreatePersonaUseCase({ id: "p1", usuarioId: "u1", puestoCorporativo: null, tipo: "postulante", habilidadesMaster: [] });
-    const factories = makeFactories();
-    vi.mocked(factories.postulante.otorgarRaices).mockRejectedValue(new Error("db down"));
-    const logger = makeLogger();
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, factories);
+    const createPersonaUseCase = { execute: vi.fn().mockRejectedValue(new Error("grant failed")) } as unknown as CreatePersonaUseCase;
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, makeLogger(), { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, makeFactories());
 
-    await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toThrow("db down");
+    await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toThrow("grant failed");
     expect(jwtService.sign).not.toHaveBeenCalled();
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("personaId=p1"));
   });
 
   it("creates a recruiter persona defaulted from the registered nombreCompleto and signs its tipo as role", async () => {
@@ -168,17 +169,18 @@ describe("RegisterUseCase", () => {
     });
 
     expect(createPersonaUseCase.execute).toHaveBeenCalledTimes(1);
-    expect(createPersonaUseCase.execute).toHaveBeenCalledWith({
-      tipo: "recruiter",
-      usuarioId: "u2",
-      puestoCorporativo: null,
-      perNombre: "Rita",
-      perApellido: "",
-      fechaContratacion: "2026-07-13",
-    });
+    expect(createPersonaUseCase.execute).toHaveBeenCalledWith(
+      {
+        tipo: "recruiter",
+        usuarioId: "u2",
+        puestoCorporativo: null,
+        perNombre: "Rita",
+        perApellido: "",
+        fechaContratacion: "2026-07-13",
+      },
+      RAICES.recruiter,
+    );
     expect(jwtService.sign).toHaveBeenCalledWith({ sub: "u2", role: "recruiter" });
-    expect(factories.recruiter.otorgarRaices).toHaveBeenCalledExactlyOnceWith("p2");
-    expect(factories.postulante.otorgarRaices).not.toHaveBeenCalled();
   });
 
   it("throws a generic conflict when the email is already registered", async () => {

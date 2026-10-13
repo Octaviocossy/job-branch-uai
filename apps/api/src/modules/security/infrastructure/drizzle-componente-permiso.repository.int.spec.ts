@@ -1,8 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeTestDb, truncateAll } from "../../../../test/setup/db";
-import { componentes, formularios, modulos, personaComponentes } from "../../../database/schema/index";
-import { DrizzlePersonaRepository } from "../../persona/infrastructure/drizzle-persona.repository";
+import { componentes, formularios, modulos, personaComponentes, personas } from "../../../database/schema/index";
 import { DrizzleListaUsuarios } from "../../users/infrastructure/drizzle-lista-usuarios.repository";
 import { Accion } from "../domain/accion";
 import { ACCIONES, FORMULARIOS, GRUPOS, type GrupoDefinicion, MODULOS } from "../domain/catalogo-matriz";
@@ -14,7 +13,6 @@ describe("DrizzleComponentePermisoRepository", () => {
   const { pool, db } = makeTestDb();
   const repo = new DrizzleComponentePermisoRepository(db);
   const listaUsuarios = new DrizzleListaUsuarios(db);
-  const personaRepo = new DrizzlePersonaRepository(db);
 
   const gruposCatalogo: GrupoDefinicion[] = Object.values(GRUPOS);
 
@@ -24,9 +22,15 @@ describe("DrizzleComponentePermisoRepository", () => {
     await repo.sincronizarAcciones(ACCIONES);
   }
 
+  // Inserted directly: `DrizzlePersonaRepository.create` always hands a Persona its roots, and these specs
+  // need one that holds none yet — the state `asignarRaices` and `listarPersonasSinRaices` exist for.
   async function crearPostulante(email: string) {
     const usuario = await listaUsuarios.agregarUsuario({ email, nombreCompleto: email, passwordHash: null });
-    const persona = await personaRepo.create({ tipo: "postulante", usuarioId: usuario.id, puestoCorporativo: null, habilidadesMaster: [] });
+    const [persona] = await db.insert(personas).values({ usuarioId: usuario.id, tipo: "postulante", puestoCorporativo: null, habilidadesMaster: [] }).returning();
+
+    if (!persona) {
+      throw new Error("Failed to create the test Persona");
+    }
 
     return persona;
   }

@@ -5,8 +5,9 @@ import { COMPONENTE_PERMISO_REPOSITORY, type ComponentePermisoRepository } from 
 import { MATRIZ_PERMISOS_FACTORIES, type MatrizPermisosFactories } from "../factories/matriz-permisos.factory";
 
 /**
- * Boot / seed sync: writes the seed catalog and hands every Persona without roots its role's default roots
- * (derived decision 32). That also recovers a Persona whose registration failed before its roots were handed out.
+ * Boot / seed sync: writes the seed catalog, then hands every Persona found without roots its role's default roots.
+ * A Persona is created holding its roots in one transaction, so that second step is a safety net — for rows
+ * written before the matrix existed or by hand — not the way a new Persona normally gets them.
  */
 @Injectable()
 export class SincronizarMatrizUseCase {

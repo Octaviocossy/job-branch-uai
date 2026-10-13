@@ -3,7 +3,7 @@ import type { CreatePersonaInput, Persona } from "@repo/models";
 import { eq } from "drizzle-orm";
 import { DRIZZLE } from "../../../database/database.constants";
 import type { Database } from "../../../database/database.module";
-import { personas } from "../../../database/schema/index";
+import { personaComponentes, personas } from "../../../database/schema/index";
 import type { PersonaRepository } from "../domain/persona.repository";
 
 type PersonaRow = typeof personas.$inferSelect;
@@ -12,14 +12,18 @@ type PersonaRow = typeof personas.$inferSelect;
 export class DrizzlePersonaRepository implements PersonaRepository {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(input: CreatePersonaInput): Promise<Persona> {
-    const [row] = await this.db.insert(personas).values(this.toRow(input)).returning();
+  async create(input: CreatePersonaInput, raices: readonly string[]): Promise<Persona> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.insert(personas).values(this.toRow(input)).returning();
 
-    if (!row) {
-      throw new Error("Failed to create persona");
-    }
+      if (!row) {
+        throw new Error("Failed to create persona");
+      }
 
-    return this.toDomain(row);
+      await tx.insert(personaComponentes).values(raices.map((componenteId) => ({ personaId: row.id, componenteId })));
+
+      return this.toDomain(row);
+    });
   }
 
   async findByUsuarioId(usuarioId: string): Promise<Persona | null> {

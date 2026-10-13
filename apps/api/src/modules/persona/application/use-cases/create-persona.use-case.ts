@@ -12,9 +12,14 @@ export class CreatePersonaUseCase {
     this.logger.setContext(CreatePersonaUseCase.name);
   }
 
-  async execute(input: CreatePersonaInput): Promise<Persona> {
+  /** `raices` are the ids of the components the Persona holds as roots; it is created holding them, never without (invariant 12). */
+  async execute(input: CreatePersonaInput, raices: readonly string[]): Promise<Persona> {
+    if (raices.length === 0) {
+      throw new Error("A Persona holds at least one root");
+    }
+
     this.logger.debug(`Creating persona tipo=${input.tipo} usuarioId=${input.usuarioId}`);
-    const persona = await this.personaRepository.create(input);
+    const persona = await this.personaRepository.create(input, raices);
     this.logger.log(`Persona created id=${persona.id}`);
     return persona;
   }

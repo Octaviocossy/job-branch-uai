@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JwtService } from "../../../../shared/auth/jwt.service";
 import type { AppLogger } from "../../../../shared/logger/app.logger";
 import type { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
+import type { ContextosSeguridadService } from "../../../security/application/contextos-seguridad.service";
 import type { MatrizPermisosFactories } from "../../../security/application/factories/matriz-permisos.factory";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
 import type { ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
@@ -37,6 +38,8 @@ const makeCreatePersonaUseCase = (created: Persona) =>
   }) as unknown as CreatePersonaUseCase;
 
 const RAICES = { postulante: ["root-postulante"], recruiter: ["root-recruiter"], administrador: ["root-administrador"] };
+
+const makeContextos = () => ({ iniciar: vi.fn().mockResolvedValue(undefined) }) as unknown as ContextosSeguridadService;
 
 const makeFactories = () =>
   ({
@@ -73,7 +76,8 @@ describe("RegisterUseCase", () => {
       habilidadesMaster: [],
     });
     const factories = makeFactories();
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories);
+    const contextos = makeContextos();
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories, contextos);
 
     const result = await useCase.execute({
       email: "a@b.com",
@@ -102,6 +106,7 @@ describe("RegisterUseCase", () => {
       },
       RAICES.postulante,
     );
+    expect(contextos.iniciar).toHaveBeenCalledExactlyOnceWith("signed.jwt");
     expect(result).toEqual({ token: "signed.jwt", user });
   });
 
@@ -115,7 +120,16 @@ describe("RegisterUseCase", () => {
     const jwtService = { sign: vi.fn().mockReturnValue("signed.jwt"), verify: vi.fn() } as unknown as JwtService;
     const createPersonaUseCase = makeCreatePersonaUseCase({ id: "p1", usuarioId: "u1", puestoCorporativo: null, tipo: "postulante", habilidadesMaster: [] });
     const factories = makeFactories();
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, makeLogger(), { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, factories);
+    const useCase = new RegisterUseCase(
+      lista,
+      passwordService,
+      jwtService,
+      makeLogger(),
+      { emit: vi.fn() } as unknown as EventEmitter2,
+      createPersonaUseCase,
+      factories,
+      makeContextos(),
+    );
 
     await useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" });
 
@@ -133,10 +147,21 @@ describe("RegisterUseCase", () => {
     const passwordService = { hash: vi.fn().mockResolvedValue("hashed"), compare: vi.fn() } as unknown as PasswordService;
     const jwtService = { sign: vi.fn(), verify: vi.fn() } as unknown as JwtService;
     const createPersonaUseCase = { execute: vi.fn().mockRejectedValue(new Error("grant failed")) } as unknown as CreatePersonaUseCase;
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, makeLogger(), { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, makeFactories());
+    const contextos = makeContextos();
+    const useCase = new RegisterUseCase(
+      lista,
+      passwordService,
+      jwtService,
+      makeLogger(),
+      { emit: vi.fn() } as unknown as EventEmitter2,
+      createPersonaUseCase,
+      makeFactories(),
+      contextos,
+    );
 
     await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toThrow("grant failed");
     expect(jwtService.sign).not.toHaveBeenCalled();
+    expect(contextos.iniciar).not.toHaveBeenCalled();
   });
 
   it("creates a recruiter persona defaulted from the registered nombreCompleto and signs its tipo as role", async () => {
@@ -159,7 +184,7 @@ describe("RegisterUseCase", () => {
       fechaContratacion: "2026-07-13",
     });
     const factories = makeFactories();
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories);
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories, makeContextos());
 
     await useCase.execute({
       email: "r@b.com",
@@ -198,7 +223,7 @@ describe("RegisterUseCase", () => {
       habilidadesMaster: [],
     });
     const factories = makeFactories();
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories);
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, eventEmitter, createPersonaUseCase, factories, makeContextos());
 
     await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toBeInstanceOf(ConflictException);
     expect(lista.agregarUsuario).not.toHaveBeenCalled();

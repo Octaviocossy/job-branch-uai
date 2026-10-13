@@ -1,6 +1,7 @@
 import { Global, Module, type OnApplicationBootstrap } from "@nestjs/common";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { PersonaModule } from "../persona/persona.module";
+import { ContextosSeguridadService } from "./application/contextos-seguridad.service";
 import { crearFactories, MATRIZ_PERMISOS_FACTORIES } from "./application/factories/matriz-permisos.factory";
 import { ResolverPermisosUseCase } from "./application/use-cases/resolver-permisos.use-case";
 import { SincronizarMatrizUseCase } from "./application/use-cases/sincronizar-matriz.use-case";
@@ -16,11 +17,12 @@ import { SecurityController } from "./presentation/security.controller";
   providers: [
     ResolverPermisosUseCase,
     SincronizarMatrizUseCase,
+    ContextosSeguridadService,
     PermissionsGuard,
     { provide: COMPONENTE_PERMISO_REPOSITORY, useClass: DrizzleComponentePermisoRepository },
     { provide: MATRIZ_PERMISOS_FACTORIES, inject: [COMPONENTE_PERMISO_REPOSITORY], useFactory: crearFactories },
   ],
-  exports: [ResolverPermisosUseCase, PermissionsGuard, COMPONENTE_PERMISO_REPOSITORY, MATRIZ_PERMISOS_FACTORIES],
+  exports: [ResolverPermisosUseCase, ContextosSeguridadService, PermissionsGuard, COMPONENTE_PERMISO_REPOSITORY, MATRIZ_PERMISOS_FACTORIES],
 })
 export class SecurityModule implements OnApplicationBootstrap {
   constructor(private readonly sincronizarMatrizUseCase: SincronizarMatrizUseCase) {}

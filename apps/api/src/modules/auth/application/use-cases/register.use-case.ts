@@ -4,6 +4,7 @@ import type { AuthResponse, RegisterInput } from "@repo/models";
 import { JwtService } from "../../../../shared/auth/jwt.service";
 import { AppLogger } from "../../../../shared/logger/app.logger";
 import { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
+import { ContextosSeguridadService } from "../../../security/application/contextos-seguridad.service";
 import { MATRIZ_PERMISOS_FACTORIES, type MatrizPermisosFactories } from "../../../security/application/factories/matriz-permisos.factory";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
 import { LISTA_USUARIOS, type ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
@@ -19,6 +20,7 @@ export class RegisterUseCase {
     private readonly eventEmitter: EventEmitter2,
     private readonly createPersonaUseCase: CreatePersonaUseCase,
     @Inject(MATRIZ_PERMISOS_FACTORIES) private readonly factories: MatrizPermisosFactories,
+    private readonly contextos: ContextosSeguridadService,
   ) {
     this.logger.setContext(RegisterUseCase.name);
   }
@@ -71,6 +73,7 @@ export class RegisterUseCase {
           );
 
     const token = this.jwtService.sign({ sub: usuario.id, role: persona.tipo });
+    await this.contextos.iniciar(token);
 
     this.logger.log(`User registered id=${usuario.id}`);
 

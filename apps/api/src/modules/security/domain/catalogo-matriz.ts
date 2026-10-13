@@ -7,10 +7,9 @@ import { Modulo } from "./modulo";
  * roots. The ids below are permanent: they are how a sync recognises a row it already wrote, so
  * never change one and never reuse one for another row.
  *
- * Acciones are keyed by `codigoAccion`. There is one per protected endpoint (decision 25); only
+ * Acciones are keyed by `codigoAccion`. There is one per protected endpoint (invariant 10); only
  * register, login and health are public. They are seeded ahead of the endpoints that do not exist
- * yet (the session and matrix-administration slices add those), so every role tree is complete from
- * the start.
+ * yet, so every role tree is complete from the start.
  */
 
 /** A use case of the spec, e.g. `CU-02`. */
@@ -43,7 +42,7 @@ const modulosPorClave = {
   ADMINISTRACION: new Modulo("2ba23030-23da-4bca-a5db-39c1fcded489", "Administración"),
 };
 
-// Formularios: a screen or form (decision 25).
+// Formularios: a screen or form of a Modulo.
 const formulariosPorClave = {
   SESION: new Formulario("cb1369b0-9ff2-4ef8-84f8-f1228bdb88dc", "Sesión", modulosPorClave.CUENTA.id),
   MIS_PERMISOS: new Formulario("2fe090f9-c46c-4f3e-b15e-067a7bb5f648", "Mis permisos", modulosPorClave.CUENTA.id),
@@ -83,7 +82,7 @@ export const GRUPOS = {
   ADMIN_USUARIOS: { id: "198429e6-de1e-4cc8-8edb-2cc12dcc6f3a", nombre: "Administración de usuarios", descripcion: "Administration of ListaUsuarios (CU-15)", padreId: null },
 } satisfies Record<string, GrupoDefinicion>;
 
-/** One Accion per protected endpoint, 29 in all; the endpoints that do not exist yet land with later slices. */
+/** One Accion per protected endpoint, 29 in all. */
 export const ACCIONES: readonly AccionDefinicion[] = [
   { codigoAccion: "auth.me", nombre: "Ver perfil propio", formularioId: formulariosPorClave.SESION.id, grupoPorDefecto: GRUPOS.CUENTA.id, cu: ["CU-14"] },
   { codigoAccion: "auth.logout", nombre: "Cerrar sesión", formularioId: formulariosPorClave.SESION.id, grupoPorDefecto: GRUPOS.CUENTA.id, cu: ["CU-14"] },

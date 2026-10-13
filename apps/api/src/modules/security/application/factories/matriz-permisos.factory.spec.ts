@@ -24,7 +24,7 @@ function accionesDe(factory: MatrizPermisosFactory): string[] {
   return contextoDe(factory).listarAcciones().sort();
 }
 
-// The nine codes the Postulante could use before the persisted matrix (decision-29 regression guard).
+// The nine codes the Postulante could use before the persisted matrix: it must keep every one.
 const POSTULANTE_ACCIONES_PREVIAS = [
   "auth.me",
   "security.viewMatrix",

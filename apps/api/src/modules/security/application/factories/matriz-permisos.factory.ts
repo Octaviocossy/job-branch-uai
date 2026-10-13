@@ -66,8 +66,8 @@ abstract class MatrizPermisosFactoryBase implements MatrizPermisosFactory {
 export class PostulanteMatrizFactory extends MatrizPermisosFactoryBase {
   readonly tipo = "postulante";
 
-  // PIPELINE and SEGUIMIENTO are interim grants: the Postulante keeps everything it can do today
-  // until the separate Recruiter-side epic removes them (decisions 16 and 29).
+  // PIPELINE and SEGUIMIENTO are interim grants: the Postulante keeps what it can do today until the
+  // Recruiter side of the pipeline is split out (.agents/specs/2026-10-12-security-module-spec-alignment.md).
   raicesPorDefecto(): readonly string[] {
     return [GRUPOS.CUENTA.id, GRUPOS.PERFILES.id, GRUPOS.ANALITICA.id, GRUPOS.PIPELINE.id, GRUPOS.SEGUIMIENTO.id];
   }

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { TERMINAL_STATUSES } from "../modules/branches/domain/terminal-statuses";
+import { insertarPersonaConRaices } from "../modules/persona/infrastructure/drizzle-persona.repository";
 import { crearFactories } from "../modules/security/application/factories/matriz-permisos.factory";
 import { SincronizarMatrizUseCase } from "../modules/security/application/use-cases/sincronizar-matriz.use-case";
 import { DrizzleComponentePermisoRepository } from "../modules/security/infrastructure/drizzle-componente-permiso.repository";
@@ -242,19 +243,6 @@ async function seedDemoUser(db: Executor) {
   return created;
 }
 
-/** A Persona is only ever inserted holding its roots, in the caller's transaction (invariant 12). */
-async function insertPersonaConRaices(db: Executor, values: typeof schema.personas.$inferInsert, raices: readonly string[]) {
-  const [persona] = await db.insert(schema.personas).values(values).returning();
-
-  if (!persona) {
-    throw new Error(`Failed to seed the ${values.tipo} persona`);
-  }
-
-  await db.insert(schema.personaComponentes).values(raices.map((componenteId) => ({ personaId: persona.id, componenteId })));
-
-  return persona;
-}
-
 async function seedDemoPersona(db: Executor, usuarioId: string, raices: readonly string[]) {
   const [existing] = await db.select().from(schema.personas).where(eq(schema.personas.usuarioId, usuarioId));
 
@@ -262,7 +250,7 @@ async function seedDemoPersona(db: Executor, usuarioId: string, raices: readonly
     return existing;
   }
 
-  return insertPersonaConRaices(db, { usuarioId, tipo: "postulante", puestoCorporativo: null, habilidadesMaster: [] }, raices);
+  return insertarPersonaConRaices(db, { tipo: "postulante", usuarioId, puestoCorporativo: null, habilidadesMaster: [] }, raices);
 }
 
 /** The only way an Administrador comes to exist (invariant 2): from the environment, with no default password. */
@@ -295,7 +283,7 @@ async function seedAdministrador(db: Executor, raices: readonly string[]): Promi
     throw new Error("Failed to seed the Administrador");
   }
 
-  await insertPersonaConRaices(db, { usuarioId: usuario.id, tipo: "administrador", puestoCorporativo: null, habilidadesMaster: [] }, raices);
+  await insertarPersonaConRaices(db, { tipo: "administrador", usuarioId: usuario.id, puestoCorporativo: null }, raices);
   console.log(`Seeded Administrador ${email}`);
 }
 

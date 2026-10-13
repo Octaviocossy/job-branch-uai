@@ -2,6 +2,7 @@ import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import type { AuthResponse, LoginInput } from "@repo/models";
 import { JwtService } from "../../../../shared/auth/jwt.service";
 import { AppLogger } from "../../../../shared/logger/app.logger";
+import { ContextosSeguridadService } from "../../../security/application/contextos-seguridad.service";
 import { LISTA_USUARIOS, type ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
 import { PasswordService } from "../password.service";
 
@@ -14,6 +15,7 @@ export class LoginUseCase {
     private readonly passwordService: PasswordService,
     private readonly jwtService: JwtService,
     private readonly logger: AppLogger,
+    private readonly contextos: ContextosSeguridadService,
   ) {
     this.logger.setContext(LoginUseCase.name);
   }
@@ -41,6 +43,7 @@ export class LoginUseCase {
     }
 
     const token = this.jwtService.sign({ sub: usuario.id, role });
+    await this.contextos.iniciar(token);
 
     this.logger.log(`User logged in id=${usuario.id}`);
 

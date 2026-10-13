@@ -1,6 +1,7 @@
 import type { Persona } from "@repo/models";
 import { describe, expect, it, vi } from "vitest";
 import type { AppLogger } from "../../../../shared/logger/app.logger";
+import { PersonaWithoutRootsError } from "../../domain/errors/persona-without-roots.error";
 import type { PersonaRepository } from "../../domain/persona.repository";
 import { CreatePersonaUseCase } from "./create-persona.use-case";
 
@@ -104,7 +105,7 @@ describe("CreatePersonaUseCase", () => {
     } as unknown as PersonaRepository;
     const useCase = new CreatePersonaUseCase(repo, makeLogger());
 
-    await expect(useCase.execute({ tipo: "postulante", usuarioId: "u1", puestoCorporativo: null, habilidadesMaster: [] }, [])).rejects.toThrow("at least one root");
+    await expect(useCase.execute({ tipo: "postulante", usuarioId: "u1", puestoCorporativo: null, habilidadesMaster: [] }, [])).rejects.toBeInstanceOf(PersonaWithoutRootsError);
     expect(repo.create).not.toHaveBeenCalled();
   });
 

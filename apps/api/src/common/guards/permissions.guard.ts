@@ -1,6 +1,6 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import type { UserRole } from "@repo/models";
+import type { PersonaTipo } from "@repo/models";
 import { ResolverPermisosUseCase } from "../../modules/security/application/use-cases/resolver-permisos.use-case";
 import type { ContextoSeguridad } from "../../modules/security/domain/contexto-seguridad";
 import type { AuthenticatedRequest } from "../../shared/auth/jwt-auth.guard";
@@ -8,7 +8,7 @@ import { REQUIERE_ACCION_KEY } from "../decorators/requiere-accion.decorator";
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  private readonly cache = new Map<UserRole, ContextoSeguridad>();
+  private readonly cache = new Map<PersonaTipo, ContextoSeguridad>();
 
   constructor(
     private readonly reflector: Reflector,
@@ -23,7 +23,7 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const contexto = this.resolverContexto(request.user.role as UserRole);
+    const contexto = this.resolverContexto(request.user.role as PersonaTipo);
 
     if (!contexto.tienePermiso(codigoAccion)) {
       throw new ForbiddenException(`Missing permission: ${codigoAccion}`);
@@ -32,7 +32,7 @@ export class PermissionsGuard implements CanActivate {
     return true;
   }
 
-  private resolverContexto(role: UserRole): ContextoSeguridad {
+  private resolverContexto(role: PersonaTipo): ContextoSeguridad {
     const cached = this.cache.get(role);
 
     if (cached) {

@@ -1,4 +1,4 @@
-import type { UserRole } from "@repo/models";
+import type { PersonaTipo } from "@repo/models";
 import { Accion } from "../../domain/accion";
 import type { ComponentePermiso } from "../../domain/componente-permiso";
 import { Formulario } from "../../domain/formulario";
@@ -82,8 +82,8 @@ export class RecruiterMatrizFactory implements MatrizPermisosFactory {
   }
 }
 
-export function resolverFactory(role: UserRole): MatrizPermisosFactory {
-  const factories: Record<UserRole, () => MatrizPermisosFactory> = {
+export function resolverFactory(role: PersonaTipo): MatrizPermisosFactory {
+  const factories: Record<PersonaTipo, () => MatrizPermisosFactory> = {
     postulante: () => new PostulanteMatrizFactory(),
     recruiter: () => new RecruiterMatrizFactory(),
   };

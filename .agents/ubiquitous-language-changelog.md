@@ -5,7 +5,7 @@
 > and the invariants in `.agents/ubiquitous-language-invariants.md` and
 > `.agents/ubiquitous-language-invariants-scaffold.md` are what govern current code.
 >
-> **Last updated:** 2026-10-12
+> **Last updated:** 2026-10-13
 
 ---
 
@@ -58,3 +58,4 @@
 | 2026-10-12 | Reworked the Permission matrix area for a persisted, shared Composite: **ComponentePermiso** gains `agregar`/`remover`; **GrupoPermisos** gains `descripcion` and is every interior node; **Modulo** and **Formulario** leave the tree as associated classes (Accion → Formulario → Modulo); **ContextoSeguridad** is initialized by the Sesion and fed by `Persona.resolverPermisos()`. Added **Sesion** and **ListaUsuarios** to Identity and access; invariant 10 now guards every endpoint except registration, login and health; added invariant 12 (security cardinalities) | Same `/grill` session (ADR-0023): the class diagram 19.13 governs, completed by the data model 20.1, the sequences 19.1–19.2 and the methods view 18.10, and in the security and identity scope the code takes the spec's names literally |
 | 2026-10-12 | Renamed **User** to **Usuario** (type, entity, table `usuarios`) and stated the security and identity naming exception in the header; added **Administrador** (third Persona subtype, seeded only), so **Persona** now has three subtypes; **Sesion** gains its table and invariant 14 (token hash, ends by expiry); **MatrizPermisosFactory** now seeds and hands out each role's default root instead of building runtime trees; **PermissionMatrix** groups Acciones by Modulo and Formulario; invariants 2 and 3 reworded for the Administrador and the Usuario entity; added invariant 13 (permissions resolved when a Sesion starts) | Same `/grill` session, third round: literal names reach every class the class diagram 19.13 draws, while tables keep the database convention and use cases keep the `apps/api` architecture |
 | 2026-10-12 | **Usuario** stores no role (`obtenerRol()` returns its Persona's `tipo`), and invariant 2 says so; **Accion** is one per protected endpoint, fixed by the seed, and invariant 10 now requires its own Accion on every non-public endpoint; added invariant 15 (ownership belongs to the use case, never the matrix) | Same `/grill` session, fourth round: the class diagram 19.13 and the data model 20.1 give Usuario no role, administrators edit groups and roots but not Acciones, and Iteración D's "only the evaluations assigned to you" is ownership, which the Composite cannot express |
+| 2026-10-13 | Removed `POST /users` and `CreateUserUseCase` (the `users` module keeps its reads only); **user.created** is now emitted by `RegisterUseCase`, the one place a Usuario is created | Epic #25 / issue #26 — Usuario identity with spec names and the role on Persona |

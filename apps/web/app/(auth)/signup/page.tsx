@@ -62,14 +62,14 @@ export default function SignUpPage() {
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="space-y-2">
-            <label htmlFor="displayName" className="text-sm font-medium text-foreground">
+            <label htmlFor="nombreCompleto" className="text-sm font-medium text-foreground">
               Nombre completo
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input id="displayName" type="text" placeholder="Tu nombre" className="pl-10" {...register("displayName")} />
+              <Input id="nombreCompleto" type="text" placeholder="Tu nombre" className="pl-10" {...register("nombreCompleto")} />
             </div>
-            {errors.displayName && <p className="text-xs text-destructive">{errors.displayName.message}</p>}
+            {errors.nombreCompleto && <p className="text-xs text-destructive">{errors.nombreCompleto.message}</p>}
           </div>
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium text-foreground">

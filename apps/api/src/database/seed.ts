@@ -216,24 +216,39 @@ const APPLICATIONS = [
 ] as const;
 
 async function seedDemoUser(db: Executor) {
-  const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, DEMO_EMAIL));
+  const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, DEMO_EMAIL));
 
   if (existing) {
     return existing;
   }
 
   const [created] = await db
-    .insert(schema.users)
+    .insert(schema.usuarios)
     .values({
       email: DEMO_EMAIL,
-      displayName: "Demo Postulante",
-      role: "postulante",
+      nombreCompleto: "Demo Postulante",
       passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
     })
     .returning();
 
   if (!created) {
     throw new Error("Failed to seed the demo user");
+  }
+
+  return created;
+}
+
+async function seedDemoPersona(db: Executor, usuarioId: string) {
+  const [existing] = await db.select().from(schema.personas).where(eq(schema.personas.usuarioId, usuarioId));
+
+  if (existing) {
+    return existing;
+  }
+
+  const [created] = await db.insert(schema.personas).values({ usuarioId, tipo: "postulante", puestoCorporativo: null, habilidadesMaster: [] }).returning();
+
+  if (!created) {
+    throw new Error("Failed to seed the demo persona");
   }
 
   return created;
@@ -387,6 +402,7 @@ async function main() {
     await tx.delete(schema.empresas);
 
     const demoUser = await seedDemoUser(tx);
+    await seedDemoPersona(tx, demoUser.id);
     const cvVersionsByName = await seedCvVersions(tx, demoUser.id);
     return seedApplications(tx, demoUser.id, cvVersionsByName);
   });

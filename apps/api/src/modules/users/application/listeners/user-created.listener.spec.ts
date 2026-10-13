@@ -1,4 +1,4 @@
-import type { User } from "@repo/models";
+import type { Usuario } from "@repo/models";
 import { describe, expect, it, vi } from "vitest";
 import type { AppLogger } from "../../../../shared/logger/app.logger";
 import type { UserCreatedEvent } from "../../domain/events/user-created.event";
@@ -14,7 +14,7 @@ describe("UserCreatedListener", () => {
       error: vi.fn(),
     } as unknown as AppLogger;
     const listener = new UserCreatedListener(logger);
-    const user: User = { id: "u1", email: "a@b.com", displayName: "A", role: "postulante" };
+    const user: Usuario = { id: "u1", email: "a@b.com", nombreCompleto: "A", authProvider: "native", intentosFallidos: 0 };
 
     listener.handleUserCreated({ user } satisfies UserCreatedEvent);
 

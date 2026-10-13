@@ -1,17 +1,17 @@
 import { ConflictException, Inject, Injectable } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import type { AuthResponse, RegisterInput, User } from "@repo/models";
+import type { AuthResponse, RegisterInput } from "@repo/models";
 import { JwtService } from "../../../../shared/auth/jwt.service";
 import { AppLogger } from "../../../../shared/logger/app.logger";
 import { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
-import { USER_REPOSITORY, type UserRepository } from "../../../users/domain/user.repository";
+import { LISTA_USUARIOS, type ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
 import { PasswordService } from "../password.service";
 
 @Injectable()
 export class RegisterUseCase {
   constructor(
-    @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
+    @Inject(LISTA_USUARIOS) private readonly listaUsuarios: ListaUsuarios,
     private readonly passwordService: PasswordService,
     private readonly jwtService: JwtService,
     private readonly logger: AppLogger,
@@ -24,7 +24,7 @@ export class RegisterUseCase {
   async execute(input: RegisterInput): Promise<AuthResponse> {
     this.logger.debug(`Registering user email=${input.email}`);
 
-    const existing = await this.userRepository.findByEmail(input.email);
+    const existing = await this.listaUsuarios.buscarPorEmail(input.email);
 
     if (existing) {
       this.logger.warn(`Registration rejected, email already in use email=${input.email}`);
@@ -32,38 +32,36 @@ export class RegisterUseCase {
     }
 
     const passwordHash = await this.passwordService.hash(input.password);
-    const created = await this.userRepository.create({
+    const usuario = await this.listaUsuarios.agregarUsuario({
       email: input.email,
-      displayName: input.displayName,
-      role: input.role,
+      nombreCompleto: input.nombreCompleto,
       passwordHash,
     });
-    const user: User = { id: created.id, email: created.email, displayName: created.displayName, role: created.role };
+    const user = usuario.toModel();
 
     // Emit AFTER persistence succeeds — never before (see §7).
     this.eventEmitter.emit(USER_CREATED_EVENT, { user });
 
-    if (created.role === "recruiter") {
-      await this.createPersonaUseCase.execute({
-        tipo: "recruiter",
-        usuarioId: created.id,
-        puestoCorporativo: null,
-        perNombre: created.displayName,
-        perApellido: "",
-        fechaContratacion: new Date().toISOString().slice(0, 10),
-      });
-    } else {
-      await this.createPersonaUseCase.execute({
-        tipo: "postulante",
-        usuarioId: created.id,
-        puestoCorporativo: null,
-        habilidadesMaster: [],
-      });
-    }
+    const persona =
+      input.role === "recruiter"
+        ? await this.createPersonaUseCase.execute({
+            tipo: "recruiter",
+            usuarioId: usuario.id,
+            puestoCorporativo: null,
+            perNombre: input.nombreCompleto,
+            perApellido: "",
+            fechaContratacion: new Date().toISOString().slice(0, 10),
+          })
+        : await this.createPersonaUseCase.execute({
+            tipo: "postulante",
+            usuarioId: usuario.id,
+            puestoCorporativo: null,
+            habilidadesMaster: [],
+          });
 
-    const token = this.jwtService.sign({ sub: user.id, role: user.role });
+    const token = this.jwtService.sign({ sub: usuario.id, role: persona.tipo });
 
-    this.logger.log(`User registered id=${user.id}`);
+    this.logger.log(`User registered id=${usuario.id}`);
 
     return { token, user };
   }

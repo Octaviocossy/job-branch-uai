@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { UserRole } from "@repo/models";
+import type { PersonaTipo } from "@repo/models";
 import { AppLogger } from "../../../../shared/logger/app.logger";
 import { ContextoSeguridad } from "../../domain/contexto-seguridad";
 import { resolverFactory } from "../factories/matriz-permisos.factory";
@@ -10,7 +10,7 @@ export class ResolverPermisosUseCase {
     this.logger.setContext(ResolverPermisosUseCase.name);
   }
 
-  execute(role: UserRole): ContextoSeguridad {
+  execute(role: PersonaTipo): ContextoSeguridad {
     this.logger.debug(`Resolving permission matrix for role=${role}`);
 
     const factory = resolverFactory(role);

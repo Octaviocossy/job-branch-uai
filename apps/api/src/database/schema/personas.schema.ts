@@ -1,13 +1,14 @@
+import type { PersonaTipo } from "@repo/models";
 import { date, pgTable, text, uuid } from "drizzle-orm/pg-core";
-import { users } from "./users.schema";
+import { usuarios } from "./usuarios.schema";
 
 export const personas = pgTable("personas", {
   id: uuid("id").primaryKey().defaultRandom(),
   usuarioId: uuid("usuario_id")
     .notNull()
     .unique()
-    .references(() => users.id),
-  tipo: text("tipo").notNull(), // "recruiter" | "postulante"
+    .references(() => usuarios.id),
+  tipo: text("tipo").$type<PersonaTipo>().notNull(),
   puestoCorporativo: text("puesto_corporativo"),
   // recruiter-only
   perNombre: text("per_nombre"),

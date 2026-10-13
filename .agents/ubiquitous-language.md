@@ -3,7 +3,7 @@
 > Single source of truth for current domain and technical terminology.
 > Read this before changing canonical types, states, processes, or data contracts.
 >
-> **Last updated:** 2026-10-12
+> **Last updated:** 2026-10-13
 > **Canonical code:** `packages/models/src/schemas/` (Zod types), `apps/api/src/database/schema/` (Drizzle tables), `apps/api/src/modules/*/domain/` (domain classes, events, errors)
 > **Budget:** notes 600 · warn 81920 · fail 102400 (bytes)
 
@@ -61,7 +61,7 @@ role profile in `persona`.
 | Postulante | `Postulante` (`postulanteSchema`, `persona.schema.ts`); domain class `Postulante` | — | The job-seeker subtype of Persona, carrying `habilidadesMaster`. The role that owns CvVersions and Applications (invariant 1). |
 | Administrador | `Administrador` (`administradorSchema`, `persona.schema.ts`); domain class `Administrador` | *admin role*, *superuser* | The third Persona subtype (SPEC 18.10), created only by the seed, never by registration. It holds the matrix-management group (CU-15) and the administration of ListaUsuarios. |
 | Auth payloads | `RegisterInput`, `LoginInput`, `AuthResponse`, `MeResponse` (`auth.schema.ts`) | — | Request/response shapes of registration, login and session issuance (RF14); not persisted. `MeResponse` is `GET /auth/me`'s `{ user, permisos }`, the web sidebar's current-user source. |
-| Sesion | `Sesion` entity (SPEC 18.10); table `sesiones` | *JWT*, *token* for the session itself | A Usuario's persisted login session (`tokenJWT`, `fechaEmision`, `fechaExpiracion`): created at login, required to be live on every authenticated request, and the initializer of its ContextoSeguridad. The JWT is only the credential that names it (invariant 14). |
+| Sesion | `Sesion` entity (SPEC 18.10); table `sesiones` | *JWT*, *token* for the session itself | A Usuario's persisted login session (`tokenJWT`, `fechaEmision`, `fechaExpiracion`): created at login and at registration (both issue a token), required to be live on every authenticated request, and the initializer of its ContextoSeguridad. The JWT is only the credential that names it (invariant 14). |
 | ListaUsuarios | `ListaUsuarios` port (`modules/users/domain/`) | *UserRepository* | The «Catálogo» of Usuarios (SPEC 19.13): `agregarUsuario`, `buscarPorEmail`. A query about users goes to the catalog, never to a single Usuario. |
 
 ### Permission matrix
@@ -77,9 +77,9 @@ Formulario and Modulo are associated with the tree's Acciones, not part of the t
 | GrupoPermisos | composite class (`domain/grupo-permisos.ts`) | *Modulo*, *Formulario* as group kinds | A node with a `descripcion` and its `hijos`, whose `evaluar` is the OR of its children by recursive traversal. Every interior node of a tree is a plain GrupoPermisos. |
 | Modulo | class (`domain/modulo.ts`) | *permission group* | A module of the application (`id`, `nombre`) that owns Formularios. Not a ComponentePermiso: it sits outside the tree and grants nothing. |
 | Formulario | class (`domain/formulario.ts`) | *permission group* | A form of one Modulo (`id`, `nombre`) where Acciones execute. Not a ComponentePermiso: an Accion points to its Formulario; the Formulario never contains it in the tree. |
-| Accion | leaf class (`domain/accion.ts`) | — | One permitted action, identified by `codigoAccion` (e.g. `branch.create`) and executed in one Formulario; `evaluar` is an exact code match. There is one per protected endpoint, fixed by the seed: administrators group Acciones but never create them (invariant 10). |
+| Accion | leaf class (`domain/accion.ts`) | — | One permitted action, identified by `codigoAccion` (e.g. `branch.create`) and executed in one Formulario; `evaluar` is an exact code match. There is one per protected endpoint, seeded ahead of the endpoints that do not exist yet and fixed by the seed: administrators group Acciones but never create them (invariant 10). |
 | ContextoSeguridad | class (`domain/contexto-seguridad.ts`) | — | Holds the permission tree of a Sesion's Persona and answers for it: `cargarMatriz`, `tienePermiso`, `listarAcciones`. The Sesion initializes it; SPEC `Persona.resolverPermisos()` supplies its roots and is not the context itself. |
-| MatrizPermisosFactory | interface + `PostulanteMatrizFactory`, `RecruiterMatrizFactory`, `AdministradorMatrizFactory` (`application/factories/matriz-permisos.factory.ts`) | — | One factory per role (Abstract Factory) defining that role's default tree: it seeds the shared groups when missing and hands a newly registered Persona its root. It builds no runtime tree — a Sesion's tree is loaded from the database. |
+| MatrizPermisosFactory | interface + `PostulanteMatrizFactory`, `RecruiterMatrizFactory`, `AdministradorMatrizFactory` (`application/factories/matriz-permisos.factory.ts`) | — | One factory per role (Abstract Factory) defining that role's default roots: it seeds the shared groups when missing, and a newly registered Persona is created already holding those roots — a set of shared groups — in one transaction (invariant 12). `crear()` builds those trees in memory, for tests only — a Sesion's tree is loaded from the database. |
 | PermissionMatrix | `PermissionMatrix` (`permissionMatrixSchema`, `permiso.schema.ts`) | — | The response of `GET /security/matrix`: the caller's permitted Acciones grouped by Modulo and Formulario. |
 
 ### Job search
@@ -118,7 +118,7 @@ its payload type live under the emitting module's `domain/events/`.
 
 | Term | Canonical type | Aliases to avoid | Notes |
 |------|----------------|------------------|-------|
-| user.created | `USER_CREATED_EVENT`, payload `{ user: Usuario }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `CreateUserUseCase` after a Usuario is persisted; consumed by `UserCreatedListener`. |
+| user.created | `USER_CREATED_EVENT`, payload `{ user: Usuario }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `RegisterUseCase` after a Usuario is persisted; consumed by `UserCreatedListener`. |
 | hito.created | `HITO_CREATED_EVENT`, payload `{ branchId, hito }` (`modules/branches/domain/events/hito-created.event.ts`) | — | Emitted by `AddHitoUseCase` after a Hito is appended. `HitoCreatedListener` only logs today — the hook for future Recordatorio scheduling. |
 | branch.archived | `BRANCH_ARCHIVED_EVENT`, payload `{ branch: Application }` (`modules/branches/domain/events/branch-archived.event.ts`) | — | Emitted by `ArchiveBranchUseCase` after an Application is archived. `BranchArchivedListener` only logs today — the hook for future analytics-cache invalidation. |
 

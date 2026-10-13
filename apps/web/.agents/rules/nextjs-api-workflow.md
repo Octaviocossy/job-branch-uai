@@ -84,7 +84,7 @@ export type TResult<T> = Success<T> | Err; // Err.value is ApiError
 ```
 
 Consumers branch on `result.type === EResult.SUCCESS` (see
-`features/home/home-view.tsx`). On the error path, call `result.value.getUserMessage()`
+`features/branches/branches-view.tsx`). On the error path, call `result.value.getUserMessage()`
 to get a user-facing string — never surface `error.message` directly. `ApiError`
 categorizes failures (`EApiErrorType`: network, timeout, validation, client, server,
 cancelled, unknown) and exposes `isRetryable()` / `isClientError()` for callers that

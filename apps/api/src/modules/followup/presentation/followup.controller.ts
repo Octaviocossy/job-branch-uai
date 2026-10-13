@@ -1,5 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { type ListFollowupsQuery, listFollowupsQuerySchema } from "@repo/models";
+import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
+import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { ZodValidationPipe } from "../../../common/pipes/zod-validation.pipe";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
@@ -9,7 +11,7 @@ import { MarkFollowupDoneUseCase } from "../application/use-cases/mark-followup-
 import { resolveThresholds } from "../domain/followup.utils";
 
 @Controller("followup")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FollowupController {
   constructor(
     private readonly listFollowupsUseCase: ListFollowupsUseCase,
@@ -17,11 +19,13 @@ export class FollowupController {
   ) {}
 
   @Get()
+  @RequiereAccion("followup.list")
   list(@CurrentUser() user: JwtPayload, @Query(new ZodValidationPipe(listFollowupsQuerySchema)) query: ListFollowupsQuery) {
     return this.listFollowupsUseCase.execute(user.sub, resolveThresholds(query.threshold));
   }
 
   @Post(":ramaId/done")
+  @RequiereAccion("followup.resolve")
   async markDone(@CurrentUser() user: JwtPayload, @Param("ramaId") ramaId: string) {
     const resolved = await this.markFollowupDoneUseCase.execute(user.sub, ramaId);
 

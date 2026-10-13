@@ -1,23 +1,22 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
-import type { PermissionMatrix, UserRole } from "@repo/models";
+import type { PermissionMatrix, PersonaTipo } from "@repo/models";
+import { ContextoActual } from "../../../common/decorators/contexto-actual.decorator";
 import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
 import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
 import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
-import { ResolverPermisosUseCase } from "../application/use-cases/resolver-permisos.use-case";
+import { ObtenerMatrizUseCase } from "../application/use-cases/obtener-matriz.use-case";
+import type { ContextoSeguridad } from "../domain/contexto-seguridad";
 
 @Controller("security")
 export class SecurityController {
-  constructor(private readonly resolverPermisosUseCase: ResolverPermisosUseCase) {}
+  constructor(private readonly obtenerMatrizUseCase: ObtenerMatrizUseCase) {}
 
   @Get("matrix")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequiereAccion("security.viewMatrix")
-  matrix(@CurrentUser() user: JwtPayload): PermissionMatrix {
-    const role = user.role as UserRole;
-    const contexto = this.resolverPermisosUseCase.execute(role);
-
-    return { role, acciones: contexto.listarAcciones() };
+  matrix(@CurrentUser() user: JwtPayload, @ContextoActual() contexto: ContextoSeguridad): Promise<PermissionMatrix> {
+    return this.obtenerMatrizUseCase.execute(user.role as PersonaTipo, contexto);
   }
 }

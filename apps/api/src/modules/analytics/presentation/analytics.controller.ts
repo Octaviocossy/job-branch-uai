@@ -1,5 +1,7 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import type { AnalyticsOverview } from "@repo/models";
+import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
+import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
 import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
@@ -10,7 +12,7 @@ import { GetSourceDistributionUseCase } from "../application/use-cases/get-sourc
 import { GetTechHeatmapUseCase } from "../application/use-cases/get-tech-heatmap.use-case";
 import { GetUserStatsUseCase } from "../application/use-cases/get-user-stats.use-case";
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("analytics")
 export class AnalyticsController {
   constructor(
@@ -23,6 +25,7 @@ export class AnalyticsController {
   ) {}
 
   @Get("overview")
+  @RequiereAccion("analytics.overview")
   async overview(@CurrentUser() user: JwtPayload): Promise<AnalyticsOverview> {
     const [conversion, roi, heatmap, gaps, sources, stats] = await Promise.all([
       this.getConversionUseCase.execute(user.sub),

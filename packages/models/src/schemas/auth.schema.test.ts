@@ -4,7 +4,7 @@ import { authResponseSchema, loginSchema, registerSchema } from "./auth.schema";
 const validRegister = {
   email: "ada@example.com",
   password: "supersecret",
-  displayName: "Ada",
+  nombreCompleto: "Ada",
   role: "postulante",
 };
 
@@ -33,6 +33,15 @@ describe("registerSchema", () => {
 
   it("rejects a role outside postulante/recruiter", () => {
     const result = registerSchema.safeParse({ ...validRegister, role: "admin" });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toContain("role");
+    }
+  });
+
+  it("rejects role administrador at registration", () => {
+    const result = registerSchema.safeParse({ ...validRegister, role: "administrador" });
 
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -77,8 +86,9 @@ describe("authResponseSchema", () => {
     user: {
       id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       email: "ada@example.com",
-      displayName: "Ada",
-      role: "postulante",
+      nombreCompleto: "Ada",
+      authProvider: "native",
+      intentosFallidos: 0,
     },
   };
 
@@ -96,8 +106,8 @@ describe("authResponseSchema", () => {
   });
 
   it("rejects a user missing required fields", () => {
-    const { role: _role, ...userWithoutRole } = validResponse.user;
-    const result = authResponseSchema.safeParse({ ...validResponse, user: userWithoutRole });
+    const { nombreCompleto: _nombreCompleto, ...userWithoutNombre } = validResponse.user;
+    const result = authResponseSchema.safeParse({ ...validResponse, user: userWithoutNombre });
 
     expect(result.success).toBe(false);
   });

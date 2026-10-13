@@ -37,14 +37,35 @@ Only the unit tier is DB-free; do not add the DB tiers to headless/parallel-runn
 
 ## Domain
 
-Domain types (e.g. `User`, `CreateUserInput`) come from `@repo/models`, the shared Zod-schema
-package. The Drizzle `users` table in `apps/api/src/database/schema/` mirrors that schema's
-shape. See `.agents/ubiquitous-language.md` (repo root) for the canonical entity definitions
-and their aliases-to-avoid.
+Domain types (e.g. `Usuario`, `RegisterInput`, `Persona`) come from `@repo/models`, the shared
+Zod-schema package. The Drizzle `usuarios` table in `apps/api/src/database/schema/` mirrors
+that schema's shape. See `.agents/ubiquitous-language.md` (repo root) for the canonical entity
+definitions and their aliases-to-avoid. In the security and identity scope the code uses the
+academic spec's names literally (`Usuario`, `ListaUsuarios`, `nombreCompleto`, `agregar`/
+`remover`) — ADR-0023.
 
-Feature modules live under `src/modules/`, one per bounded concern — `users`, `persona`
-(the `Persona`/`Recruiter`/`Postulante` actor hierarchy, composing `User` via `usuario_id`),
-`auth`, `cv-versions`, `branches`, `analytics`, `followup`, `security`, `health`.
+Feature modules live under `src/modules/`, one per bounded concern:
+
+- `users` — the `Usuario` domain entity (`autenticar`, `incrementarIntentos`, `obtenerRol`) and
+  the `ListaUsuarios` catalog port; `GET /users` and `GET /users/:id` (Administrador only).
+- `persona` — the `Persona`/`Recruiter`/`Postulante`/`Administrador` actor hierarchy, composing
+  `Usuario` via `usuario_id`; a Persona is created holding its role's root groups.
+- `auth` — register, login, logout, `GET /auth/me`; the persisted `Sesion` and the in-memory
+  `ContextosSesionStore`.
+- `security` — the persisted permission matrix: Composite (`ComponentePermiso`,
+  `GrupoPermisos`, `Accion`), one `MatrizPermisosFactory` per role, the seed catalog
+  `domain/catalogo-matriz.ts`, the boot/seed sync, and the Administrador's matrix endpoints.
+- `cv-versions`, `branches`, `analytics`, `followup`, `health`.
+
 `modules/persona/` follows the same use-case layout as every other module
 (`domain/persona.ts`, `persona.repository.ts`, `create-persona.use-case.ts`,
 `drizzle-persona.repository.ts`, `persona.module.ts`).
+
+**Permissions.** Every endpoint except register, login and health carries its own `Accion`:
+`@UseGuards(JwtAuthGuard, PermissionsGuard)` plus `@RequiereAccion('<codigo>')`. A new endpoint
+needs a new `Accion` in `modules/security/domain/catalogo-matriz.ts` (and a default group
+there, so a role's tree can reach it) — `common/guards/endpoint-permissions.audit.spec.ts`
+fails otherwise. `JwtAuthGuard` requires a live `Sesion` on every request; permissions are
+resolved when the `Sesion` starts, and `PermissionsGuard` only reads the `ContextoSeguridad`
+it initialized. Ownership ("only my branches") belongs in the use case, never in the matrix.
+The endpoint → `Accion` table is in `README.md`; the design is in `docs/DOCUMENTACION.md`.

@@ -46,8 +46,8 @@ runtime split.
   a fresh `createTestQueryClient()`, returning `{ queryClient, ...renderResult }`.
 
 Component tests import `renderWithClient` instead of hand-rolling a `QueryClientProvider` per
-test file. Existing tests written before this helper (e.g. the inline `renderHome` in
-`features/home/home-view.test.tsx`) should migrate to it when touched.
+test file (see `features/profiles/profiles-view.test.tsx`). A test that still builds its own
+provider should migrate to it when touched.
 
 ---
 
@@ -63,19 +63,61 @@ ambient types for them. **Never re-import `@testing-library/jest-dom` in a test 
 
 Component tests `vi.mock("@/services/<resource>.service")` — they never mock axios or
 `@/config/axios.config` directly. This keeps the hook → service wiring exercised for real
-while stubbing only the network boundary (see `features/home/home-view.test.tsx`'s
-`vi.mock("@/services/health.service", ...)` / `vi.mock("@/services/users.service", ...)`).
+while stubbing only the network boundary (see `features/profiles/profiles-view.test.tsx`'s
+`vi.mock("@/services/cv-versions.service", ...)` / `vi.mock("@/services/auth.service", ...)`).
 
 Unit tests for `utilities/api.utility.ts` mock `@/config` (the axios instance) instead — one
 layer lower, since the unit under test *is* the thing that calls axios. A unit test for the
 axios instance itself (`config/axios.config.ts`) uses a mock adapter rather than mocking
 axios's own module.
 
+### Permission-gated controls need a session
+
+The menu, the action buttons and the routes are filtered by `usePermissions()` against the
+`permisos` that `GET /auth/me` returns (the static map in `config/permissions.config.ts`). A
+component test of a gated control — a button, a nav link, a guarded route — therefore has to
+sign in first, or the control is simply absent. Mock `auth.service`'s `me` with a session
+from `test/session-fixture.ts` and set a token:
+
+```tsx
+vi.mock("@/services/auth.service", () => ({
+  auth_service: { me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() },
+}));
+
+describe("ProfilesView", () => {
+  isolateLocalStorage();
+
+  beforeEach(() => {
+    vi.mocked(auth_service.me).mockResolvedValue({ type: EResult.SUCCESS, value: sessionWith(ALL_POSTULANTE_CODES), status: 200 });
+    setAuthToken("test-token");
+  });
+
+  afterEach(() => {
+    clearAuthToken();
+  });
+});
+```
+
+- `sessionWith(codes)` builds a `MeResponse` holding exactly those `codigoAccion` values;
+  `ALL_POSTULANTE_CODES` and `ADMINISTRADOR_CODES` are the full sets of the two roles. To
+  test a denied control, pass the full set minus the code (`ALL_POSTULANTE_CODES.filter(...)`)
+  and assert the control is absent.
+- `setAuthToken("test-token")` is required: `useSession` is disabled while there is no token,
+  so without it `me` is never called and every gated control stays hidden.
+- `isolateLocalStorage()` (`test/isolated-storage.ts`) goes first in the `describe`, before any
+  `beforeEach` that touches the token. It gives each test its own in-memory `localStorage`;
+  the file-backed one is shared by every test file running in parallel, so one file clearing
+  its token would sign the others out.
+- Examples: `features/profiles/profiles-view.test.tsx`, `components/sidebar.test.tsx`,
+  `components/route-permission-guard.test.tsx`. The route lookup helpers (`codigoParaRuta`,
+  `primeraRutaPermitida`) are unit-tested in `config/permissions.config.test.ts`; the
+  action → code map (`ACTION_PERMISSIONS`) is exercised through the component tests.
+
 ---
 
 ## 6. Out of scope: Zod schema validation
 
-Zod schema validation (`createUserSchema`, etc.) is tested in `@repo/models` — never re-test
+Zod schema validation (`registerSchema`, etc.) is tested in `@repo/models` — never re-test
 schema shape or parsing in any `apps/web` tier. Test how the app *uses* the validated result
 instead (e.g. "an invalid email shows a form error and does not call the service").
 

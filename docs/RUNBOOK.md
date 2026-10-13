@@ -81,6 +81,11 @@ cp apps/api/.env.example apps/api/.env  # apps/api — used when running the API
 | `PORT` | `3001` | Port the NestJS API listens on. |
 | `CORS_ORIGIN` | `http://localhost:3000` | Allowed browser origin (the web app). |
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/api` | Points the API at the **dev** Postgres on `:5432`. |
+| `JWT_SECRET` | `change-me-to-a-long-random-secret` | Signs the session JWT. Required, at least 16 characters. |
+| `JWT_EXPIRES_IN` | `1d` | Lifetime of a session token — and of its `Sesion` row, whose expiry is the token's. |
+| `ADMIN_EMAIL` | _(empty)_ | Email of the first Administrador. Read only by `db:seed`; see [Seed and the permission matrix](#seed-and-the-permission-matrix). |
+| `ADMIN_PASSWORD` | _(empty)_ | Password of the first Administrador. **There is no default password.** Read only by `db:seed`. |
+| `ADMIN_NOMBRE_COMPLETO` | `Administrador` | Optional display name of the first Administrador. Read only by `db:seed`. |
 
 > **`NEXT_PUBLIC_API_URL` is a build-time value.** Next.js inlines `NEXT_PUBLIC_*` variables into the client bundle when the app is **built**, not when it runs. Changing it requires a rebuild (`pnpm --filter web build`, or `pnpm docker:build` for the container). It is passed to the `web` image as the `NEXT_PUBLIC_API_URL` **build arg** in `docker-compose.yml`.
 
@@ -147,7 +152,29 @@ pnpm --filter api db:studio     # open Drizzle Studio against the dev DB
 
 Edit the Drizzle schema under `apps/api/src/database/schema/`, run `db:generate` to emit a new SQL migration into `apps/api/drizzle/`, then `db:migrate` to apply it.
 
-The committed migrations already include `apps/api/drizzle/0002_goofy_strong_guy.sql`, which added the `personas` table (the `Persona`/`Recruiter`/`Postulante` actor hierarchy, `usuario_id` unique FK → `users`) and `cv_versions.snapshot_vacante_id` (nullable FK → `vacantes`) — `db:migrate` applies it like any other pending migration, nothing extra to run.
+The committed migrations already include `apps/api/drizzle/0002_goofy_strong_guy.sql`, which added the `personas` table (the `Persona`/`Recruiter`/`Postulante` actor hierarchy, `usuario_id` unique FK to the account table) and `cv_versions.snapshot_vacante_id` (nullable FK → `vacantes`) — `db:migrate` applies it like any other pending migration, nothing extra to run.
+
+The security module added three more, all applied by `db:migrate` in order with nothing extra to run:
+
+| Migration | What it does |
+|-----------|--------------|
+| `0003_usuario_identity` | Renames `users` to `usuarios` and `display_name` to `nombre_completo`; backfills a `personas` row for every account that lacks one from its old `role`; then drops `usuarios.role` (the role is now the Persona's `tipo`). |
+| `0004_permission_matrix` | Creates `componentes`, `formularios`, `modulos` and `persona_componentes` — the persisted permission matrix. The tables start empty: the matrix is filled by the boot sync (below). |
+| `0005_sesiones` | Creates `sesiones`, one row per login, holding the SHA-256 of the session token and its expiry. |
+
+After the first deploy of this change **every user signs in again**: a token issued before `0005` names no `Sesion`, and `JwtAuthGuard` rejects it.
+
+### Seed and the permission matrix
+
+```sh
+pnpm --filter api db:seed    # from the repo root; reads apps/api/.env
+```
+
+The seed syncs the permission matrix, creates the demo Postulante with its sample data and — only when asked — the first Administrador.
+
+- **First Administrador.** It is created only when **both** `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set in `apps/api/.env`; `ADMIN_NOMBRE_COMPLETO` is optional. There is **no default password**, and no other path creates an Administrador — registration only offers `postulante` and `recruiter`. If a Usuario with `ADMIN_EMAIL` already exists the seed skips it: it does not promote that account or reset its password, so pick an unused email.
+- **The seed is destructive to job-search data.** Before re-inserting the demo data it empties `feedback`, `recordatorios`, `hitos`, `applications`, `vacantes`, `cv_versions` and `empresas` — for **every** user. Do not run it against a database holding data you want to keep. It leaves `usuarios`, `personas`, `sesiones` and the matrix alone.
+- **The matrix syncs at boot, too.** `SecurityModule` runs the same sync every time the API starts, so a fresh database needs no manual step beyond `db:migrate` (`0004` must be applied first). The sync is idempotent: it upserts the `modulos` and `formularios` catalog by fixed id, seeds each role's default groups when missing, refreshes the name and `Formulario` of each of the 29 `Accion`es, and hands any Persona found with no roots its role's defaults. It **never rewrites a group an Administrador edited** and never moves an `Accion` to a different group, so matrix edits survive restarts.
 
 ### Test database
 
@@ -315,6 +342,20 @@ pnpm --filter api db:test:migrate   # migrate it
 pnpm --filter api test:db           # retry
 ```
 
+### Signed out after an API restart
+
+Every request returns `401` right after the API restarted, and the web app drops back to the sign-in page. This is expected, not a fault: **every API restart ends every `Sesion`**, including each `nest start --watch` reload under `pnpm dev`. The `ContextoSeguridad` that a `Sesion` initialized when it started lives in the API process's memory; after a restart the first request finds a `Sesion` with no context, closes it, and answers `401` rather than re-resolve the permissions mid-session. Users just sign in again.
+
+The design assumes **one API instance**. Behind a load balancer with several, a request that landed on an instance that did not start the `Sesion` would sign the user out.
+
+### Permission changes do not show up until the next login
+
+An Administrador edits a group or a Persona's roots, but the affected user still sees the old menu or gets `403`. Permissions are resolved **once, when a `Sesion` starts**, and the change touches no live `Sesion`: the user signs out and in again (or waits for the token to expire).
+
+### No Administrador exists
+
+Registration cannot create one. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `apps/api/.env`, then run `pnpm --filter api db:seed` — read the destructive-seed note in [Seed and the permission matrix](#seed-and-the-permission-matrix) first. If that email is already a Usuario the seed skips it, so use a different one.
+
 ### Stale Turborepo cache
 
 A task returns a stale result or a cache seems wrong. Force a fresh run and inspect the cache:
@@ -372,6 +413,7 @@ Remember `NEXT_PUBLIC_API_URL` is baked into the `web` image at build time — a
 | `db:generate` | `drizzle-kit generate` | Generate a migration from schema changes. |
 | `db:migrate` | `drizzle-kit migrate` | Apply migrations to the dev DB. |
 | `db:studio` | `drizzle-kit studio` | Drizzle Studio against the dev DB. |
+| `db:seed` | `tsx src/database/seed.ts` | Sync the permission matrix, seed the demo data and (with `ADMIN_EMAIL`/`ADMIN_PASSWORD`) the first Administrador. Destructive to job-search data. |
 | `db:test:up` | `docker compose up -d postgres-test` | Start the test DB (`:5433/api_test`). |
 | `db:test:down` | `docker compose stop postgres-test` | Stop the test DB. |
 | `db:test:migrate` | `dotenv -e .env.test -- drizzle-kit migrate` | Migrate the test DB (via `.env.test`). |

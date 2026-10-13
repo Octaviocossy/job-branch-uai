@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Patch, Post, UploadedFile, UseGuards, Use
 import { FileInterceptor } from "@nestjs/platform-express";
 import { type CreateCvVersionRequest, createCvVersionRequestSchema } from "@repo/models";
 import { z } from "zod";
+import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
+import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { ZodValidationPipe } from "../../../common/pipes/zod-validation.pipe";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
@@ -17,7 +19,7 @@ const setSnapshotVacanteSchema = z.object({ vacanteId: z.uuid() });
 type SetSnapshotVacanteBody = z.infer<typeof setSnapshotVacanteSchema>;
 
 @Controller("cv-versions")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CvVersionsController {
   constructor(
     private readonly listCvVersionsUseCase: ListCvVersionsUseCase,
@@ -29,32 +31,38 @@ export class CvVersionsController {
   ) {}
 
   @Get()
+  @RequiereAccion("cv.list")
   findAll(@CurrentUser() user: JwtPayload) {
     return this.listCvVersionsUseCase.execute(user.sub);
   }
 
   @Post()
+  @RequiereAccion("cv.create")
   create(@CurrentUser() user: JwtPayload, @Body(new ZodValidationPipe(createCvVersionRequestSchema)) body: CreateCvVersionRequest) {
     return this.createCvVersionUseCase.execute(user.sub, body);
   }
 
   @Post(":id/file")
+  @RequiereAccion("cv.upload")
   @UseInterceptors(FileInterceptor("file"))
   uploadFile(@CurrentUser() user: JwtPayload, @Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
     return this.uploadCvFileUseCase.execute(user.sub, id, file);
   }
 
   @Post(":id/output")
+  @RequiereAccion("cv.setOutput")
   setOutput(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.setOutputProfileUseCase.execute(user.sub, id);
   }
 
   @Patch(":id/snapshot-vacante")
+  @RequiereAccion("cv.setSnapshotVacante")
   setSnapshotVacante(@CurrentUser() user: JwtPayload, @Param("id") id: string, @Body(new ZodValidationPipe(setSnapshotVacanteSchema)) body: SetSnapshotVacanteBody) {
     return this.setSnapshotVacanteUseCase.execute(id, user.sub, body.vacanteId);
   }
 
   @Post(":id/archive")
+  @RequiereAccion("cv.archive")
   archive(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.archiveCvVersionUseCase.execute(user.sub, id);
   }

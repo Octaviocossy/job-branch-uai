@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CreateCvVersionDialog } from "@/features/profiles/create-cv-version-dialog";
 import { useCvVersions } from "@/hooks/use-cv-versions";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useSetOutputProfile } from "@/hooks/use-set-output-profile";
 import { useUploadCv } from "@/hooks/use-upload-cv";
 import { type CvVersion, EResult } from "@/models";
@@ -28,6 +29,7 @@ function findBestPerformer(versions: CvVersion[]): CvVersion | undefined {
 function CvVersionCard({ version, isBest }: { version: CvVersion; isBest: boolean }) {
   const uploadCv = useUploadCv();
   const setOutputProfile = useSetOutputProfile();
+  const { canDo } = usePermissions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | undefined>();
 
@@ -113,16 +115,20 @@ function CvVersionCard({ version, isBest }: { version: CvVersion; isBest: boolea
         {uploadError && <p className="mb-3 text-destructive text-xs">{uploadError}</p>}
 
         <div className="flex items-center gap-2 border-border/50 border-t pt-3">
-          <input ref={fileInputRef} type="file" accept=".pdf,.docx" className="hidden" onChange={handleFileChange} />
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={uploadCv.isPending} onClick={() => fileInputRef.current?.click()}>
-            {uploadCv.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
-            Subir PDF
-          </Button>
+          {canDo("uploadCv") && (
+            <>
+              <input ref={fileInputRef} type="file" accept=".pdf,.docx" className="hidden" onChange={handleFileChange} />
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={uploadCv.isPending} onClick={() => fileInputRef.current?.click()}>
+                {uploadCv.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                Subir PDF
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" className="gap-1.5 text-xs">
             <GitBranch className="h-3.5 w-3.5" />
             Ver ramas
           </Button>
-          {!isOutputProfile && (
+          {!isOutputProfile && canDo("setOutputProfile") && (
             <Button
               variant="outline"
               size="sm"
@@ -142,6 +148,7 @@ function CvVersionCard({ version, isBest }: { version: CvVersion; isBest: boolea
 
 export function ProfilesView() {
   const { data, isLoading } = useCvVersions();
+  const { canDo } = usePermissions();
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
@@ -151,10 +158,12 @@ export function ProfilesView() {
           <h1 className="font-semibold text-foreground text-xl">Perfiles CV</h1>
           <p className="mt-0.5 text-muted-foreground text-sm">Gestiona y versiona tus distintas configuraciones de perfil</p>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Nueva Versión
-        </Button>
+        {canDo("createCvVersion") && (
+          <Button size="sm" className="gap-2" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Nueva Versión
+          </Button>
+        )}
       </div>
 
       {isLoading && <p className="text-muted-foreground text-sm">Cargando perfiles…</p>}
@@ -163,7 +172,7 @@ export function ProfilesView() {
 
       {!isLoading && data?.type === EResult.SUCCESS && <ProfilesList versions={data.value} />}
 
-      <CreateCvVersionDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {canDo("createCvVersion") && <CreateCvVersionDialog open={createOpen} onOpenChange={setCreateOpen} />}
     </div>
   );
 }

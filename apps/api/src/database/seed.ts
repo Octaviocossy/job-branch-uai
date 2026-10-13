@@ -4,6 +4,11 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { TERMINAL_STATUSES } from "../modules/branches/domain/terminal-statuses";
+import { insertarPersonaConRaices } from "../modules/persona/infrastructure/drizzle-persona.repository";
+import { crearFactories } from "../modules/security/application/factories/matriz-permisos.factory";
+import { SincronizarMatrizUseCase } from "../modules/security/application/use-cases/sincronizar-matriz.use-case";
+import { DrizzleComponentePermisoRepository } from "../modules/security/infrastructure/drizzle-componente-permiso.repository";
+import { AppLogger } from "../shared/logger/app.logger";
 import * as schema from "./schema/index";
 
 const DEMO_EMAIL = "demo@jobbranch.dev";
@@ -216,18 +221,17 @@ const APPLICATIONS = [
 ] as const;
 
 async function seedDemoUser(db: Executor) {
-  const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, DEMO_EMAIL));
+  const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, DEMO_EMAIL));
 
   if (existing) {
     return existing;
   }
 
   const [created] = await db
-    .insert(schema.users)
+    .insert(schema.usuarios)
     .values({
       email: DEMO_EMAIL,
-      displayName: "Demo Postulante",
-      role: "postulante",
+      nombreCompleto: "Demo Postulante",
       passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
     })
     .returning();
@@ -237,6 +241,50 @@ async function seedDemoUser(db: Executor) {
   }
 
   return created;
+}
+
+async function seedDemoPersona(db: Executor, usuarioId: string, raices: readonly string[]) {
+  const [existing] = await db.select().from(schema.personas).where(eq(schema.personas.usuarioId, usuarioId));
+
+  if (existing) {
+    return existing;
+  }
+
+  return insertarPersonaConRaices(db, { tipo: "postulante", usuarioId, puestoCorporativo: null, habilidadesMaster: [] }, raices);
+}
+
+/** The only way an Administrador comes to exist (invariant 2): from the environment, with no default password. */
+async function seedAdministrador(db: Executor, raices: readonly string[]): Promise<void> {
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email || !password) {
+    console.log("ADMIN_EMAIL/ADMIN_PASSWORD not set — no Administrador seeded");
+    return;
+  }
+
+  const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, email));
+
+  if (existing) {
+    console.log(`Usuario ${email} already exists — no Administrador seeded`);
+    return;
+  }
+
+  const [usuario] = await db
+    .insert(schema.usuarios)
+    .values({
+      email,
+      nombreCompleto: process.env.ADMIN_NOMBRE_COMPLETO || "Administrador",
+      passwordHash: await bcrypt.hash(password, 10),
+    })
+    .returning();
+
+  if (!usuario) {
+    throw new Error("Failed to seed the Administrador");
+  }
+
+  await insertarPersonaConRaices(db, { tipo: "administrador", usuarioId: usuario.id, puestoCorporativo: null }, raices);
+  console.log(`Seeded Administrador ${email}`);
 }
 
 async function seedCvVersions(db: Executor, usuarioId: string) {
@@ -375,6 +423,13 @@ async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const db = drizzle(pool, { schema });
 
+  // The catalog goes first: the demo Postulante and the Administrador are created holding their role's default
+  // roots, which are rows of the catalog. The sync also hands any Persona that already exists without roots
+  // (a database seeded before the matrix) its role's roots.
+  const repository = new DrizzleComponentePermisoRepository(db);
+  const factories = crearFactories(repository);
+  await new SincronizarMatrizUseCase(repository, factories, new AppLogger()).execute();
+
   const { recordatorioCount, feedbackCount } = await db.transaction(async (tx) => {
     // Reverse FK order so re-running the seeder never duplicates rows; the demo user
     // itself stays stable via seedDemoUser's email guard.
@@ -387,6 +442,8 @@ async function main() {
     await tx.delete(schema.empresas);
 
     const demoUser = await seedDemoUser(tx);
+    await seedDemoPersona(tx, demoUser.id, factories.postulante.raicesPorDefecto());
+    await seedAdministrador(tx, factories.administrador.raicesPorDefecto());
     const cvVersionsByName = await seedCvVersions(tx, demoUser.id);
     return seedApplications(tx, demoUser.id, cvVersionsByName);
   });

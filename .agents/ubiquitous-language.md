@@ -22,11 +22,15 @@ one of six (ADR-0016, ADR-0017, ADR-0021):
 `CLAUDE.md` `@`-imports the index, both invariants files and this file; the scaffold vocabulary
 is read on demand.
 
-Domain source: the academic deliverable (Parcial N2, Ingeniería de Software, UAI) — its domain
-model (§6) and state machines (§7). Its Spanish names (`Usuario`, `RamaAplicacion`,
+Domain source: the academic deliverable's latest iteration — UAI *Trabajo de Diploma*, Evaluación
+Parcial 1, document v8.0 of 2026-09-27, which consolidates iterations A–C and adds iteration D; it
+is the project's source of truth. Domain model in §17.4 and §18.2, state machines in §14, detailed
+design in §19, data model in §20.2. Its Spanish names (`Usuario`, `RamaAplicacion`,
 `VersionPerfil`, …) are recorded below as *SPEC* names. Canonical Zod/Drizzle identifiers are
-English (`user`, `application`, `cvVersion`, …) except where the source's Spanish is kept
-literally (`Vacante`, `Hito`, `esPerfilSalida`, `fechaVencimiento`, …).
+English (`application`, `cvVersion`, …) except where the source's Spanish is kept literally
+(`Vacante`, `Hito`, `esPerfilSalida`, `fechaVencimiento`, …) — and in the security and identity
+scope, whose classes take the spec's names (`Usuario`, `ListaUsuarios`, `nombreCompleto`;
+ADR-0023).
 
 ---
 
@@ -51,29 +55,32 @@ role profile in `persona`.
 
 | Term | Canonical type | Aliases to avoid | Notes |
 |------|----------------|------------------|-------|
-| User | `User` (`userSchema`, `user.schema.ts`); table `users` | *Usuario* as a code identifier | SPEC `Usuario`. The account holder shared by `apps/api` and `apps/web`. Its `role` (`postulante` or `recruiter`) is fixed at registration (invariant 2), and it never carries `passwordHash` (invariant 3). |
-| Persona | `Persona`, discriminated on `tipo` (`persona.schema.ts`); table `personas`; domain class `Persona` (`modules/persona/domain/persona.ts`) | *User subtype* | The role-specific profile that **composes** a User through `usuarioId` — association, not inheritance — one per User (unique `usuario_id`). Both subtypes share one table with a discriminator. Created together with the User by `RegisterUseCase`. |
+| Usuario | `Usuario` (`usuarioSchema`, `@repo/models`); domain entity `Usuario` (`modules/users/domain/`); table `usuarios` | *User* as a code identifier | SPEC `Usuario` (19.13). The account holder (`nombreCompleto`, `email`, `authProvider`, `intentosFallidos`) shared by `apps/api` and `apps/web`, able to `autenticar(password)` and `incrementarIntentos()`. It stores no role: `obtenerRol()` returns its Persona's `tipo` (invariant 2). |
+| Persona | `Persona`, discriminated on `tipo` (`persona.schema.ts`); table `personas`; domain class `Persona` (`modules/persona/domain/persona.ts`) | *Usuario subtype* | The role-specific profile that **composes** a Usuario through `usuarioId` — association, not inheritance — one per Usuario (unique `usuario_id`). Its three subtypes share one table with a discriminator. `RegisterUseCase` creates it with its Usuario, except an Administrador, which only the seed creates. |
 | PersonaRecruiter | `PersonaRecruiter` (`personaRecruiterSchema`, `persona.schema.ts`); domain class `Recruiter` | bare `Recruiter` / `recruiterSchema` for this subtype in `@repo/models` | The recruiter subtype of Persona (`perNombre`, `perApellido`, `fechaContratacion`). In `@repo/models` the bare `Recruiter` name belongs to the Recruiter contact, so the barrel (`export *`) never re-exports an ambiguous name. |
 | Postulante | `Postulante` (`postulanteSchema`, `persona.schema.ts`); domain class `Postulante` | — | The job-seeker subtype of Persona, carrying `habilidadesMaster`. The role that owns CvVersions and Applications (invariant 1). |
+| Administrador | `Administrador` (`administradorSchema`, `persona.schema.ts`); domain class `Administrador` | *admin role*, *superuser* | The third Persona subtype (SPEC 18.10), created only by the seed, never by registration. It holds the matrix-management group (CU-15) and the administration of ListaUsuarios. |
 | Auth payloads | `RegisterInput`, `LoginInput`, `AuthResponse`, `MeResponse` (`auth.schema.ts`) | — | Request/response shapes of registration, login and session issuance (RF14); not persisted. `MeResponse` is `GET /auth/me`'s `{ user, permisos }`, the web sidebar's current-user source. |
+| Sesion | `Sesion` entity (SPEC 18.10); table `sesiones` | *JWT*, *token* for the session itself | A Usuario's persisted login session (`tokenJWT`, `fechaEmision`, `fechaExpiracion`): created at login, required to be live on every authenticated request, and the initializer of its ContextoSeguridad. The JWT is only the credential that names it (invariant 14). |
+| ListaUsuarios | `ListaUsuarios` port (`modules/users/domain/`) | *UserRepository* | The «Catálogo» of Usuarios (SPEC 19.13): `agregarUsuario`, `buscarPorEmail`. A query about users goes to the catalog, never to a single Usuario. |
 
 ### Permission matrix
 
 The RF15/CU15 hierarchical permission matrix in `apps/api/src/modules/security/`: a **Composite**
-tree per role, built by a **Factory** — the project's two mandatory design patterns. Built in
-memory per role; there are no permission tables yet (`PermisosJerarquia`/`PersonaPermisos` are a
-documented follow-up).
+tree of persisted, shared nodes, of which each Persona holds one or more roots (invariant 12),
+seeded and handed out per role by a **Factory** — the project's two mandatory design patterns.
+Formulario and Modulo are associated with the tree's Acciones, not part of the tree.
 
 | Term | Canonical type | Aliases to avoid | Notes |
 |------|----------------|------------------|-------|
-| ComponentePermiso | abstract class (`domain/componente-permiso.ts`) | — | The Composite component: `evaluar(codigoAccion)`, `agregarHijo`, `obtenerHijos`. Every node of a role's tree is one. |
-| GrupoPermisos | composite class (`domain/grupo-permisos.ts`) | — | A node whose `evaluar` is the OR of its children, by recursive traversal. A role's root is one; Modulo and Formulario are its named kinds. |
-| Modulo | `Modulo extends GrupoPermisos` (`domain/modulo.ts`) | — | Module-level grouping directly under a role's root, holding that module's Formulario. The tree reads root → Modulo → Formulario → Accion. |
-| Formulario | `Formulario extends GrupoPermisos` (`domain/formulario.ts`) | — | Form-level grouping of Accion leaves, under a Modulo. |
-| Accion | leaf class (`domain/accion.ts`) | — | One permitted action, identified by `codigoAccion` (e.g. `branch.create`); `evaluar` is an exact match. These codes are what `@RequiereAccion` names (invariant 10). |
-| ContextoSeguridad | class (`domain/contexto-seguridad.ts`) | — | Wraps one role's tree: `cargarMatriz`, `tienePermiso`, `listarAcciones`. SPEC's `Persona.resolverPermisos()`. |
-| MatrizPermisosFactory | interface + `PostulanteMatrizFactory`, `RecruiterMatrizFactory` (`application/factories/matriz-permisos.factory.ts`) | — | Builds a role's tree (Abstract Factory). `resolverFactory(role)` picks the concrete factory; `ResolverPermisosUseCase` wires its tree into a ContextoSeguridad. |
-| PermissionMatrix | `PermissionMatrix` (`permissionMatrixSchema`, `permiso.schema.ts`) | — | The `{ role, acciones }` response of `GET /security/matrix`. |
+| ComponentePermiso | abstract class (`domain/componente-permiso.ts`) | — | The Composite component: `evaluar(codigoAccion)`, `agregar`, `remover`, `obtenerHijos`. Nodes are shared: a node has at most one parent, yet any number of Personas may hold it as a root. |
+| GrupoPermisos | composite class (`domain/grupo-permisos.ts`) | *Modulo*, *Formulario* as group kinds | A node with a `descripcion` and its `hijos`, whose `evaluar` is the OR of its children by recursive traversal. Every interior node of a tree is a plain GrupoPermisos. |
+| Modulo | class (`domain/modulo.ts`) | *permission group* | A module of the application (`id`, `nombre`) that owns Formularios. Not a ComponentePermiso: it sits outside the tree and grants nothing. |
+| Formulario | class (`domain/formulario.ts`) | *permission group* | A form of one Modulo (`id`, `nombre`) where Acciones execute. Not a ComponentePermiso: an Accion points to its Formulario; the Formulario never contains it in the tree. |
+| Accion | leaf class (`domain/accion.ts`) | — | One permitted action, identified by `codigoAccion` (e.g. `branch.create`) and executed in one Formulario; `evaluar` is an exact code match. There is one per protected endpoint, fixed by the seed: administrators group Acciones but never create them (invariant 10). |
+| ContextoSeguridad | class (`domain/contexto-seguridad.ts`) | — | Holds the permission tree of a Sesion's Persona and answers for it: `cargarMatriz`, `tienePermiso`, `listarAcciones`. The Sesion initializes it; SPEC `Persona.resolverPermisos()` supplies its roots and is not the context itself. |
+| MatrizPermisosFactory | interface + `PostulanteMatrizFactory`, `RecruiterMatrizFactory`, `AdministradorMatrizFactory` (`application/factories/matriz-permisos.factory.ts`) | — | One factory per role (Abstract Factory) defining that role's default tree: it seeds the shared groups when missing and hands a newly registered Persona its root. It builds no runtime tree — a Sesion's tree is loaded from the database. |
+| PermissionMatrix | `PermissionMatrix` (`permissionMatrixSchema`, `permiso.schema.ts`) | — | The response of `GET /security/matrix`: the caller's permitted Acciones grouped by Modulo and Formulario. |
 
 ### Job search
 
@@ -90,7 +97,7 @@ applications that track each process.
 | Application | `Application` (`applicationSchema`, `application.schema.ts`); table `applications`; API module `branches` | *rama* alone; *RamaAplicacion* as a code identifier | SPEC `RamaAplicacion`. One selection process: a Postulante's application to a Vacante through the CvVersion used at apply time, tracked as a `timeline` of Hitos. The API calls it a *branch* (`/branches`, `branch.archived`). |
 | ApplicationStatus | `applicationStatusSchema` (defined in `hito.schema.ts`, re-used by `application.schema.ts`) | — | `Enviado`, `Entrevista Técnica`, `RRHH`, `Oferta`, `Rechazado`, `Archivado` — defined beside Hito to avoid a circular import. `Oferta`, `Rechazado` and `Archivado` are terminal (`TERMINAL_STATUSES`, `modules/branches/domain/terminal-statuses.ts`). |
 | PIPELINE_STAGES | constant (`hito.schema.ts`) | *transition order* | The kanban column order: `Enviado`, `RRHH`, `Entrevista Técnica`, `Oferta`, `Rechazado` — no `Archivado`. A display order, not an enforced transition sequence (see Flagged ambiguities). |
-| Recruiter contact | `Recruiter` (`recruiterSchema`, `application.schema.ts`) | *PersonaRecruiter* | The recruiter's contact details embedded in an Application — `{ name, linkedin?, email? }`, persisted as `applications.recruiter_*`. Not a registered User. |
+| Recruiter contact | `Recruiter` (`recruiterSchema`, `application.schema.ts`) | *PersonaRecruiter* | The recruiter's contact details embedded in an Application — `{ name, linkedin?, email? }`, persisted as `applications.recruiter_*`. Not a registered Usuario. |
 | Hito | `Hito` (`hitoSchema`, `hito.schema.ts`); table `hitos` | *HitoProceso* as a code identifier | SPEC `HitoProceso`. One milestone in an Application's `timeline`: the ApplicationStatus at that point plus optional follow-up metadata. Appended by `AddHitoUseCase`. |
 | Feedback | `Feedback` (`feedbackSchema`, `feedback.schema.ts`); table `feedback` | *FeedbackPostMortem* as a code identifier | SPEC `FeedbackPostMortem`. Qualitative post-interview data attached to a Hito (RF04). |
 | Recordatorio | `Recordatorio` (`recordatorioSchema`, `recordatorio.schema.ts`); table `recordatorios` | — | An anti-ghosting follow-up reminder on an Application (RF05/RF13); `estado` starts `pendiente`. |
@@ -111,7 +118,7 @@ its payload type live under the emitting module's `domain/events/`.
 
 | Term | Canonical type | Aliases to avoid | Notes |
 |------|----------------|------------------|-------|
-| user.created | `USER_CREATED_EVENT`, payload `{ user: User }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `CreateUserUseCase` after a User is persisted; consumed by `UserCreatedListener`. |
+| user.created | `USER_CREATED_EVENT`, payload `{ user: Usuario }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `CreateUserUseCase` after a Usuario is persisted; consumed by `UserCreatedListener`. |
 | hito.created | `HITO_CREATED_EVENT`, payload `{ branchId, hito }` (`modules/branches/domain/events/hito-created.event.ts`) | — | Emitted by `AddHitoUseCase` after a Hito is appended. `HitoCreatedListener` only logs today — the hook for future Recordatorio scheduling. |
 | branch.archived | `BRANCH_ARCHIVED_EVENT`, payload `{ branch: Application }` (`modules/branches/domain/events/branch-archived.event.ts`) | — | Emitted by `ArchiveBranchUseCase` after an Application is archived. `BranchArchivedListener` only logs today — the hook for future analytics-cache invalidation. |
 

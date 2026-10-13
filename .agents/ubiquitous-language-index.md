@@ -10,6 +10,7 @@
 | Term | Area |
 |------|------|
 | Accion | Permission matrix |
+| Administrador | Identity and access |
 | Application | Job search |
 | ApplicationStatus | Job search |
 | Auth payloads | Identity and access |
@@ -23,6 +24,7 @@
 | Formulario | Permission matrix |
 | GrupoPermisos | Permission matrix |
 | Hito | Job search |
+| ListaUsuarios | Identity and access |
 | MatrizPermisosFactory | Permission matrix |
 | Metrics | Read models |
 | Modulo | Permission matrix |
@@ -34,7 +36,8 @@
 | Postulante | Identity and access |
 | Recordatorio | Job search |
 | Recruiter contact | Job search |
-| User | Identity and access |
+| Sesion | Identity and access |
+| Usuario | Identity and access |
 | Vacante | Job search |
 | branch.archived | Domain events |
 | hito.created | Domain events |

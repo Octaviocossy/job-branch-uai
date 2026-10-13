@@ -13,7 +13,7 @@ test to a running Postgres instance.
 | Tier | Naming | Config | What it exercises | Needs the test DB? |
 |---|---|---|---|---|
 | **Unit** | `*.spec.ts` | `vitest.config.ts` | A single class in isolation — use case, listener, controller — with every dependency (`AppLogger`, repository ports, `EventEmitter2`) mocked via `vi.fn()`. | No |
-| **Adapter integration** | `*.int.spec.ts` | `vitest.integration.config.ts` | One `infrastructure/` repository (e.g. `DrizzleUserRepository`) against the **real** Drizzle client and a real Postgres — no HTTP, no Nest module bootstrap. | Yes |
+| **Adapter integration** | `*.int.spec.ts` | `vitest.integration.config.ts` | One `infrastructure/` repository (e.g. `DrizzleListaUsuarios`) against the **real** Drizzle client and a real Postgres — no HTTP, no Nest module bootstrap. | Yes |
 | **E2E** | `*.e2e-spec.ts` | `vitest.e2e.config.ts` | The full `AppModule`, booted via `@nestjs/testing`, driven over HTTP with `supertest` — controller → use case → real repository → real Postgres. | Yes |
 
 Rule of thumb: **unit = mock the port, integration = real Drizzle adapter vs test DB, e2e =
@@ -30,7 +30,7 @@ silently hand these classes `undefined` instead of an instance. `vitest.e2e.conf
 to restore it. Don't remove this plugin from the e2e config, and add it to any other config
 that boots Nest's DI container the same way.
 
-**Out of scope:** Zod schema validation (`createUserSchema`, etc.) is tested in `@repo/models`
+**Out of scope:** Zod schema validation (`registerSchema`, etc.) is tested in `@repo/models`
 itself. Do not re-test schema shape/parsing here in any tier — test how `apps/api` *uses* the
 validated result instead.
 
@@ -39,21 +39,38 @@ validated result instead.
 ## 2. File placement & naming
 
 - Unit specs live beside the code under test in `src/`, e.g.
-  `src/modules/users/application/use-cases/create-user.use-case.spec.ts`.
+  `src/modules/users/application/use-cases/get-user.use-case.spec.ts`.
 - Integration specs also live beside the code under test in `src/`, but end in `.int.spec.ts`,
-  e.g. `src/modules/users/infrastructure/drizzle-user.repository.int.spec.ts`.
+  e.g. `src/modules/users/infrastructure/drizzle-lista-usuarios.repository.int.spec.ts`.
 - E2E specs live under `test/`, ending in `.e2e-spec.ts`, e.g. `test/users.e2e-spec.ts`.
 - Shared test helpers live in `test/setup/`:
   - `test/setup/global-db.ts` — Vitest `globalSetup` for the integration/e2e configs; loads
     `.env.test` and runs the committed `apps/api/drizzle/` migrations against the test DB
     once, before any test file in that tier runs.
   - `test/setup/db.ts` — `makeTestDb()` (a `Pool` + `drizzle(pool, { schema })` pair wired to
-    `DATABASE_URL`) and `truncateAll(db)` (clears the `users` table between tests). Import
-    this from integration specs; call `truncateAll` in a `beforeEach`/`afterEach` so tests
-    don't leak state into each other.
+    `DATABASE_URL`) and `truncateAll(db)` (clears `usuarios` and `empresas` with `CASCADE`,
+    which empties every table hanging off them — `personas`, `sesiones`,
+    `persona_componentes`, `applications`, `cv_versions`, `vacantes`, … — between tests).
+    Import this from integration specs; call `truncateAll` in a `beforeEach`/`afterEach` so
+    tests don't leak state into each other. **The permission-matrix catalog (`componentes`,
+    `formularios`, `modulos`) is never truncated:** it is seed data that
+    `SincronizarMatrizUseCase` writes when the app boots, so an e2e spec finds it already in
+    place. An integration spec has no app boot: when it needs a root for a Persona it inserts
+    its own `componentes` row and deletes it in `afterAll`, as
+    `drizzle-persona.repository.int.spec.ts` does.
   - `test/setup/app.ts` — `createTestApp()`, which compiles the real `AppModule` via
     `Test.createTestingModule` and returns `{ app, http }` (`http` is the raw HTTP server to
     hand to `supertest(http)`). Import this from e2e specs.
+  - `test/setup/auth.ts` — the e2e auth helper: `registrar(http, overrides?)` (`POST
+    /auth/register` with a unique email, returns the `AuthResponse`), `login(http, email,
+    password)` (returns the bearer token) and `crearAdministrador(app, email, password)`.
+    Registration cannot create an Administrador, so that helper builds one the way the seed
+    does (a `Usuario` plus a `Persona` holding the Administrador factory's default roots).
+    Every protected route needs a live `Sesion`, so an e2e request carries a token from
+    `registrar` or `login`, never a hand-signed one.
+  - `test/setup/doubles.ts` and `test/setup/sesion-doubles.ts` — unit-tier test doubles:
+    `makeLogger()`, `makeComponenteRepository()`, `makeSesionRepository()`, `makeSesion()`.
+    Reuse them instead of re-declaring an `AppLogger` or repository mock per spec.
 
 ---
 
@@ -111,7 +128,7 @@ container is running.
 
 - Adding branching logic, a new use case, or a listener → **unit** spec next to the file,
   mocking `AppLogger`/repository port/`EventEmitter2` exactly like
-  `create-user.use-case.spec.ts` and `user-created.listener.spec.ts` already do.
+  `get-user.use-case.spec.ts` and `user-created.listener.spec.ts` already do.
 - Adding or changing a `infrastructure/drizzle-*.repository.ts` method (new query, changed SQL
   behavior) → **integration** spec (`*.int.spec.ts`) using `makeTestDb()` +
   `truncateAll()`, asserting against the real Drizzle client.

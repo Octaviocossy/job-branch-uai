@@ -2,7 +2,7 @@ import type { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/config", () => ({
-  axios: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  axios: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
 import { axios } from "@/config";
@@ -18,6 +18,7 @@ describe("api utility", () => {
     vi.mocked(axios.get).mockReset();
     vi.mocked(axios.post).mockReset();
     vi.mocked(axios.put).mockReset();
+    vi.mocked(axios.patch).mockReset();
     vi.mocked(axios.delete).mockReset();
   });
 
@@ -45,6 +46,15 @@ describe("api utility", () => {
     await api.post("/users", { email: "ada@example.com" });
 
     expect(axios.post).toHaveBeenCalledWith("/users", { email: "ada@example.com" }, { params: undefined, signal: undefined });
+  });
+
+  it("forwards the body as the second argument on PATCH", async () => {
+    vi.mocked(axios.patch).mockResolvedValue({ data: { id: "1" }, status: 200 });
+
+    const result = await api.patch("/users/1", { email: "ada@example.com" });
+
+    expect(axios.patch).toHaveBeenCalledWith("/users/1", { email: "ada@example.com" }, { params: undefined, signal: undefined });
+    expect(result).toEqual({ type: EResult.SUCCESS, value: { id: "1" }, status: 200 });
   });
 
   it("passes params and signal in the config position on GET", async () => {

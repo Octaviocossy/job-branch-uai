@@ -3,7 +3,7 @@
 > Single source of truth for current domain and technical terminology.
 > Read this before changing canonical types, states, processes, or data contracts.
 >
-> **Last updated:** 2026-10-12
+> **Last updated:** 2026-10-13
 > **Canonical code:** `packages/models/src/schemas/` (Zod types), `apps/api/src/database/schema/` (Drizzle tables), `apps/api/src/modules/*/domain/` (domain classes, events, errors)
 > **Budget:** notes 600 · warn 81920 · fail 102400 (bytes)
 
@@ -118,7 +118,7 @@ its payload type live under the emitting module's `domain/events/`.
 
 | Term | Canonical type | Aliases to avoid | Notes |
 |------|----------------|------------------|-------|
-| user.created | `USER_CREATED_EVENT`, payload `{ user: Usuario }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `CreateUserUseCase` after a Usuario is persisted; consumed by `UserCreatedListener`. |
+| user.created | `USER_CREATED_EVENT`, payload `{ user: Usuario }` (`modules/users/domain/events/user-created.event.ts`) | — | Emitted by `RegisterUseCase` after a Usuario is persisted; consumed by `UserCreatedListener`. |
 | hito.created | `HITO_CREATED_EVENT`, payload `{ branchId, hito }` (`modules/branches/domain/events/hito-created.event.ts`) | — | Emitted by `AddHitoUseCase` after a Hito is appended. `HitoCreatedListener` only logs today — the hook for future Recordatorio scheduling. |
 | branch.archived | `BRANCH_ARCHIVED_EVENT`, payload `{ branch: Application }` (`modules/branches/domain/events/branch-archived.event.ts`) | — | Emitted by `ArchiveBranchUseCase` after an Application is archived. `BranchArchivedListener` only logs today — the hook for future analytics-cache invalidation. |
 

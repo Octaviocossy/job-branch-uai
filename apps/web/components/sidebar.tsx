@@ -18,10 +18,10 @@ const NAV_ITEMS = [
   { href: "/profiles", icon: FileText, label: "Perfiles CV" },
 ];
 
-function getInitials(displayName: string | undefined): string {
-  if (!displayName) return "?";
+function getInitials(nombreCompleto: string | undefined): string {
+  if (!nombreCompleto) return "?";
 
-  const initials = displayName
+  const initials = nombreCompleto
     .trim()
     .split(/\s+/)
     .slice(0, 2)
@@ -81,9 +81,9 @@ export function Sidebar() {
       <div className="border-t border-sidebar-border px-2 py-3">
         <div className="px-2">
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">{getInitials(user?.displayName)}</div>
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">{getInitials(user?.nombreCompleto)}</div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-sidebar-foreground">{isPending ? "Cargando…" : (user?.displayName ?? "Invitado")}</p>
+              <p className="truncate text-xs font-medium text-sidebar-foreground">{isPending ? "Cargando…" : (user?.nombreCompleto ?? "Invitado")}</p>
               <p className="truncate text-[10px] text-muted-foreground">{isPending ? "" : (user?.email ?? "")}</p>
             </div>
           </div>

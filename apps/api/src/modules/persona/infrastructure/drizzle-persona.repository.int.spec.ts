@@ -1,13 +1,13 @@
 import type { CreatePersonaInput } from "@repo/models";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeTestDb, truncateAll } from "../../../../test/setup/db";
-import { DrizzleUserRepository } from "../../users/infrastructure/drizzle-user.repository";
+import { DrizzleListaUsuarios } from "../../users/infrastructure/drizzle-lista-usuarios.repository";
 import { DrizzlePersonaRepository } from "./drizzle-persona.repository";
 
 describe("DrizzlePersonaRepository", () => {
   const { pool, db } = makeTestDb();
   const repo = new DrizzlePersonaRepository(db);
-  const userRepo = new DrizzleUserRepository(db);
+  const listaUsuarios = new DrizzleListaUsuarios(db);
 
   beforeAll(async () => {
     await truncateAll(db);
@@ -22,10 +22,10 @@ describe("DrizzlePersonaRepository", () => {
   });
 
   it("persists a recruiter persona and reads it back with the discriminated shape", async () => {
-    const user = await userRepo.create({
+    const user = await listaUsuarios.agregarUsuario({
       email: "recruiter@example.com",
-      displayName: "Rita Recruiter",
-      role: "recruiter",
+      nombreCompleto: "Rita Recruiter",
+      passwordHash: null,
     });
     const input: CreatePersonaInput = {
       tipo: "recruiter",
@@ -51,10 +51,10 @@ describe("DrizzlePersonaRepository", () => {
   });
 
   it("persists a postulante persona and reads it back with the discriminated shape", async () => {
-    const user = await userRepo.create({
+    const user = await listaUsuarios.agregarUsuario({
       email: "postulante@example.com",
-      displayName: "Pablo Postulante",
-      role: "postulante",
+      nombreCompleto: "Pablo Postulante",
+      passwordHash: null,
     });
     const input: CreatePersonaInput = {
       tipo: "postulante",

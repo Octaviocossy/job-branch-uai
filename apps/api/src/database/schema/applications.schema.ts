@@ -1,13 +1,13 @@
 import { boolean, date, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { cvVersions } from "./cv-versions.schema";
-import { users } from "./users.schema";
+import { usuarios } from "./usuarios.schema";
 import { vacantes } from "./vacantes.schema";
 
 export const applications = pgTable("applications", {
   id: uuid("id").primaryKey().defaultRandom(),
   usuarioId: uuid("usuario_id")
     .notNull()
-    .references(() => users.id),
+    .references(() => usuarios.id),
   vacanteId: uuid("vacante_id")
     .notNull()
     .references(() => vacantes.id),

@@ -1,5 +1,5 @@
 import { boolean, customType, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { users } from "./users.schema";
+import { usuarios } from "./usuarios.schema";
 import { vacantes } from "./vacantes.schema";
 
 export const bytea = customType<{ data: Buffer }>({
@@ -10,7 +10,7 @@ export const cvVersions = pgTable("cv_versions", {
   id: uuid("id").primaryKey().defaultRandom(),
   usuarioId: uuid("usuario_id")
     .notNull()
-    .references(() => users.id),
+    .references(() => usuarios.id),
   name: text("name").notNull(),
   focus: text("focus").notNull(),
   tags: text("tags").array().notNull().default([]),

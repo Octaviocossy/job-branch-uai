@@ -1,11 +1,14 @@
 import { z } from "zod";
-import { userRoleSchema, userSchema } from "./user.schema";
+import { usuarioSchema } from "./usuario.schema";
+
+/** The roles a person may choose at registration — never `administrador` (invariant 2). */
+export const registerRoleSchema = z.enum(["postulante", "recruiter"]);
 
 export const registerSchema = z.object({
   email: z.email(),
   password: z.string().min(8),
-  displayName: z.string().min(1),
-  role: userRoleSchema,
+  nombreCompleto: z.string().min(1),
+  role: registerRoleSchema,
 });
 
 export const loginSchema = z.object({
@@ -15,14 +18,15 @@ export const loginSchema = z.object({
 
 export const authResponseSchema = z.object({
   token: z.string().min(1),
-  user: userSchema,
+  user: usuarioSchema,
 });
 
 export const meResponseSchema = z.object({
-  user: userSchema,
+  user: usuarioSchema,
   permisos: z.array(z.string()),
 });
 
+export type RegisterRole = z.infer<typeof registerRoleSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type AuthResponse = z.infer<typeof authResponseSchema>;

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Post, UseGuards } from "@nestjs/common";
-import { type AuthResponse, type LoginInput, loginSchema, type MeResponse, type RegisterInput, registerSchema, type UserRole } from "@repo/models";
+import { type AuthResponse, type LoginInput, loginSchema, type MeResponse, type PersonaTipo, type RegisterInput, registerSchema } from "@repo/models";
 import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
 import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { ZodValidationPipe } from "../../../common/pipes/zod-validation.pipe";
@@ -41,7 +41,7 @@ export class AuthController {
       throw new NotFoundException("Usuario no encontrado");
     }
 
-    const role = payload.role as UserRole;
+    const role = payload.role as PersonaTipo;
     const contexto = this.resolverPermisosUseCase.execute(role);
 
     return { user, permisos: contexto.listarAcciones() };

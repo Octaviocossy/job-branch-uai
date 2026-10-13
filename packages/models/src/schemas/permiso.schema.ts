@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { userRoleSchema } from "./user.schema";
+import { personaTipoSchema } from "./persona.schema";
 
 export const permissionMatrixSchema = z.object({
-  role: userRoleSchema,
+  role: personaTipoSchema,
   acciones: z.array(z.string().min(1)),
 });
 

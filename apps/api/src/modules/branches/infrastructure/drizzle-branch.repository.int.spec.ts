@@ -1,7 +1,7 @@
 import type { CreateApplicationInput, CreateFeedbackInput, CreateHitoInput } from "@repo/models";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeTestDb, truncateAll } from "../../../../test/setup/db";
-import { cvVersions, users } from "../../../database/schema/index";
+import { cvVersions, usuarios } from "../../../database/schema/index";
 import { CvVersionNotFoundError } from "../domain/errors/cv-version-not-found.error";
 import { DrizzleBranchRepository } from "./drizzle-branch.repository";
 
@@ -35,7 +35,7 @@ describe("DrizzleBranchRepository", () => {
   beforeEach(async () => {
     await truncateAll(db);
 
-    const [user] = await db.insert(users).values({ email: "demo@jobbranch.dev", displayName: "Demo", role: "postulante" }).returning();
+    const [user] = await db.insert(usuarios).values({ email: "demo@jobbranch.dev", nombreCompleto: "Demo" }).returning();
 
     if (!user) {
       throw new Error("Failed to seed the demo user");
@@ -47,7 +47,7 @@ describe("DrizzleBranchRepository", () => {
   });
 
   async function seedOtherUser(email: string) {
-    const [user] = await db.insert(users).values({ email, displayName: "Other", role: "postulante" }).returning();
+    const [user] = await db.insert(usuarios).values({ email, nombreCompleto: "Other" }).returning();
 
     if (!user) {
       throw new Error(`Failed to seed user ${email}`);

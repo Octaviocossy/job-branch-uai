@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeTestDb, truncateAll } from "../../../../test/setup/db";
-import { cvVersions, empresas, users, vacantes } from "../../../database/schema/index";
+import { cvVersions, empresas, usuarios, vacantes } from "../../../database/schema/index";
 import { DrizzleCvVersionRepository } from "./drizzle-cv-version.repository";
 
 describe("DrizzleCvVersionRepository", () => {
@@ -22,7 +22,7 @@ describe("DrizzleCvVersionRepository", () => {
   beforeEach(async () => {
     await truncateAll(db);
 
-    const [user] = await db.insert(users).values({ email: "demo@jobbranch.dev", displayName: "Demo", role: "postulante" }).returning();
+    const [user] = await db.insert(usuarios).values({ email: "demo@jobbranch.dev", nombreCompleto: "Demo" }).returning();
 
     if (!user) {
       throw new Error("Failed to seed the demo user");
@@ -72,7 +72,7 @@ describe("DrizzleCvVersionRepository", () => {
   });
 
   it("throws NotFoundException when the cv version does not belong to the user", async () => {
-    const [otherUser] = await db.insert(users).values({ email: "other@jobbranch.dev", displayName: "Other", role: "postulante" }).returning();
+    const [otherUser] = await db.insert(usuarios).values({ email: "other@jobbranch.dev", nombreCompleto: "Other" }).returning();
 
     if (!otherUser) {
       throw new Error("Failed to seed the other user");

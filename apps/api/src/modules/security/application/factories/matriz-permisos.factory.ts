@@ -1,6 +1,6 @@
 import type { PersonaTipo } from "@repo/models";
 import { Accion } from "../../domain/accion";
-import { ACCIONES, GRUPOS, type GrupoDefinicion } from "../../domain/catalogo-matriz";
+import { accionesPorDefectoDe, conDescendientes, GRUPOS, type GrupoDefinicion, grupoPorId, subgruposDe } from "../../domain/catalogo-matriz";
 import type { ComponentePermiso } from "../../domain/componente-permiso";
 import type { ComponentePermisoRepository } from "../../domain/componente-permiso.repository";
 import { GrupoPermisos } from "../../domain/grupo-permisos";
@@ -22,8 +22,6 @@ export interface MatrizPermisosFactory {
 
 export type MatrizPermisosFactories = Record<PersonaTipo, MatrizPermisosFactory>;
 
-const TODOS_LOS_GRUPOS: readonly GrupoDefinicion[] = Object.values(GRUPOS);
-
 /** Plain classes, not `@Injectable`, so the seed script can build them too. */
 abstract class MatrizPermisosFactoryBase implements MatrizPermisosFactory {
   abstract readonly tipo: PersonaTipo;
@@ -33,11 +31,11 @@ abstract class MatrizPermisosFactoryBase implements MatrizPermisosFactory {
   abstract raicesPorDefecto(): readonly string[];
 
   crear(): ComponentePermiso[] {
-    return this.raicesPorDefecto().map((id) => this.construirGrupo(this.grupo(id)));
+    return this.raicesPorDefecto().map((id) => this.construirGrupo(grupoPorId(id)));
   }
 
   async sembrar(): Promise<void> {
-    const grupos = this.raicesPorDefecto().flatMap((id) => this.conDescendientes(this.grupo(id)));
+    const grupos = this.raicesPorDefecto().flatMap((id) => conDescendientes(grupoPorId(id)));
 
     await this.repository.asegurarGrupos(grupos);
   }
@@ -46,32 +44,14 @@ abstract class MatrizPermisosFactoryBase implements MatrizPermisosFactory {
     await this.repository.asignarRaices(personaId, this.raicesPorDefecto());
   }
 
-  private grupo(id: string): GrupoDefinicion {
-    const grupo = TODOS_LOS_GRUPOS.find((candidato) => candidato.id === id);
-
-    if (!grupo) {
-      throw new Error(`Unknown default group ${id}`);
-    }
-
-    return grupo;
-  }
-
-  private subgruposDe(grupo: GrupoDefinicion): GrupoDefinicion[] {
-    return TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === grupo.id);
-  }
-
-  private conDescendientes(grupo: GrupoDefinicion): GrupoDefinicion[] {
-    return [grupo, ...this.subgruposDe(grupo).flatMap((subgrupo) => this.conDescendientes(subgrupo))];
-  }
-
   private construirGrupo(definicion: GrupoDefinicion): GrupoPermisos {
     const grupo = new GrupoPermisos(definicion.id, definicion.nombre, definicion.descripcion);
 
-    for (const subgrupo of this.subgruposDe(definicion)) {
+    for (const subgrupo of subgruposDe(definicion)) {
       grupo.agregar(this.construirGrupo(subgrupo));
     }
 
-    for (const accion of ACCIONES.filter((candidata) => candidata.grupoPorDefecto === definicion.id)) {
+    for (const accion of accionesPorDefectoDe(definicion)) {
       grupo.agregar(new Accion(accion.codigoAccion, accion.nombre, accion.codigoAccion, accion.formularioId));
     }
 

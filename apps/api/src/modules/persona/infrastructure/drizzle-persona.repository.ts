@@ -29,68 +29,42 @@ export class DrizzlePersonaRepository implements PersonaRepository {
   }
 
   private toRow(input: CreatePersonaInput): typeof personas.$inferInsert {
+    const base = {
+      usuarioId: input.usuarioId,
+      tipo: input.tipo,
+      puestoCorporativo: input.puestoCorporativo,
+      perNombre: null,
+      perApellido: null,
+      fechaContratacion: null,
+      habilidadesMaster: [],
+    };
+
     switch (input.tipo) {
       case "recruiter":
-        return {
-          usuarioId: input.usuarioId,
-          tipo: input.tipo,
-          puestoCorporativo: input.puestoCorporativo,
-          perNombre: input.perNombre,
-          perApellido: input.perApellido,
-          fechaContratacion: input.fechaContratacion,
-          habilidadesMaster: [],
-        };
+        return { ...base, perNombre: input.perNombre, perApellido: input.perApellido, fechaContratacion: input.fechaContratacion };
       case "postulante":
-        return {
-          usuarioId: input.usuarioId,
-          tipo: input.tipo,
-          puestoCorporativo: input.puestoCorporativo,
-          perNombre: null,
-          perApellido: null,
-          fechaContratacion: null,
-          habilidadesMaster: input.habilidadesMaster,
-        };
+        return { ...base, habilidadesMaster: input.habilidadesMaster };
       case "administrador":
-        return {
-          usuarioId: input.usuarioId,
-          tipo: input.tipo,
-          puestoCorporativo: input.puestoCorporativo,
-          perNombre: null,
-          perApellido: null,
-          fechaContratacion: null,
-          habilidadesMaster: [],
-        };
+        return base;
     }
   }
 
   private toDomain(row: PersonaRow): Persona {
-    if (row.tipo === "recruiter") {
-      return {
-        id: row.id,
-        usuarioId: row.usuarioId,
-        puestoCorporativo: row.puestoCorporativo,
-        tipo: "recruiter",
-        perNombre: row.perNombre ?? "",
-        perApellido: row.perApellido ?? "",
-        fechaContratacion: row.fechaContratacion ?? "",
-      };
-    }
+    const base = { id: row.id, usuarioId: row.usuarioId, puestoCorporativo: row.puestoCorporativo };
 
-    if (row.tipo === "administrador") {
-      return {
-        id: row.id,
-        usuarioId: row.usuarioId,
-        puestoCorporativo: row.puestoCorporativo,
-        tipo: "administrador",
-      };
+    switch (row.tipo) {
+      case "recruiter":
+        return {
+          ...base,
+          tipo: "recruiter",
+          perNombre: row.perNombre ?? "",
+          perApellido: row.perApellido ?? "",
+          fechaContratacion: row.fechaContratacion ?? "",
+        };
+      case "postulante":
+        return { ...base, tipo: "postulante", habilidadesMaster: row.habilidadesMaster };
+      case "administrador":
+        return { ...base, tipo: "administrador" };
     }
-
-    return {
-      id: row.id,
-      usuarioId: row.usuarioId,
-      puestoCorporativo: row.puestoCorporativo,
-      tipo: "postulante",
-      habilidadesMaster: row.habilidadesMaster,
-    };
   }
 }

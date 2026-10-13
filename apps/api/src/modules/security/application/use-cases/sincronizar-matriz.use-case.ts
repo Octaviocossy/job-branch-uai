@@ -4,7 +4,10 @@ import { ACCIONES, FORMULARIOS, MODULOS } from "../../domain/catalogo-matriz";
 import { COMPONENTE_PERMISO_REPOSITORY, type ComponentePermisoRepository } from "../../domain/componente-permiso.repository";
 import { MATRIZ_PERMISOS_FACTORIES, type MatrizPermisosFactories } from "../factories/matriz-permisos.factory";
 
-/** Boot / seed sync: writes the seed catalog and hands every Persona without roots its role's default roots (derived decision 32). */
+/**
+ * Boot / seed sync: writes the seed catalog and hands every Persona without roots its role's default roots
+ * (derived decision 32). That also recovers a Persona whose registration failed before its roots were handed out.
+ */
 @Injectable()
 export class SincronizarMatrizUseCase {
   constructor(

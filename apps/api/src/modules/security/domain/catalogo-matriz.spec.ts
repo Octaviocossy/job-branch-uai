@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACCIONES, FORMULARIOS, GRUPOS, MODULOS } from "./catalogo-matriz";
+import { ACCIONES, accionesPorDefectoDe, conDescendientes, FORMULARIOS, GRUPOS, grupoPorId, MODULOS, subgruposDe } from "./catalogo-matriz";
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -73,5 +73,36 @@ describe("catalogo-matriz", () => {
         expect(cu, accion.codigoAccion).toMatch(/^CU-\d{2}$/);
       }
     }
+  });
+
+  it("looks a default group up by id and throws on an unknown one", () => {
+    expect(grupoPorId(GRUPOS.PIPELINE.id)).toBe(GRUPOS.PIPELINE);
+    expect(() => grupoPorId("not-a-group")).toThrow("Unknown default group not-a-group");
+  });
+
+  it("lists a group's direct subgroups only", () => {
+    expect(
+      subgruposDe(GRUPOS.PIPELINE)
+        .map((grupo) => grupo.id)
+        .sort(),
+    ).toEqual([GRUPOS.PIPELINE_TABLERO, GRUPOS.PIPELINE_CREAR, GRUPOS.PIPELINE_CLONAR, GRUPOS.PIPELINE_HITOS, GRUPOS.PIPELINE_ARCHIVAR].map((grupo) => grupo.id).sort());
+    expect(subgruposDe(GRUPOS.CUENTA)).toEqual([]);
+  });
+
+  it("lists a group with its descendants, each parent before its children", () => {
+    const ids = conDescendientes(GRUPOS.PIPELINE).map((grupo) => grupo.id);
+
+    expect(ids[0]).toBe(GRUPOS.PIPELINE.id);
+    expect(ids).toHaveLength(1 + subgruposDe(GRUPOS.PIPELINE).length);
+    expect(conDescendientes(GRUPOS.CUENTA)).toEqual([GRUPOS.CUENTA]);
+  });
+
+  it("lists the Acciones seeded directly under a group", () => {
+    expect(
+      accionesPorDefectoDe(GRUPOS.CUENTA)
+        .map((accion) => accion.codigoAccion)
+        .sort(),
+    ).toEqual(["auth.logout", "auth.me", "security.viewMatrix"]);
+    expect(accionesPorDefectoDe(GRUPOS.PIPELINE)).toEqual([]);
   });
 });

@@ -6,9 +6,6 @@ import type { Env } from "../../config/env.validation";
 export interface JwtPayload {
   sub: string;
   role: string;
-  /** Issued-at and expiry (epoch seconds), added by `jsonwebtoken` when the token is signed. */
-  iat?: number;
-  exp?: number;
 }
 
 @Injectable()

@@ -187,3 +187,29 @@ export const ACCIONES: readonly AccionDefinicion[] = [
   { codigoAccion: "usuario.list", nombre: "Listar usuarios", formularioId: formulariosPorClave.USUARIOS.id, grupoPorDefecto: GRUPOS.ADMIN_USUARIOS.id, cu: ["CU-15"] },
   { codigoAccion: "usuario.view", nombre: "Ver usuario", formularioId: formulariosPorClave.USUARIOS.id, grupoPorDefecto: GRUPOS.ADMIN_USUARIOS.id, cu: ["CU-15"] },
 ];
+
+const TODOS_LOS_GRUPOS: readonly GrupoDefinicion[] = Object.values(GRUPOS);
+
+export function grupoPorId(id: string): GrupoDefinicion {
+  const grupo = TODOS_LOS_GRUPOS.find((candidato) => candidato.id === id);
+
+  if (!grupo) {
+    throw new Error(`Unknown default group ${id}`);
+  }
+
+  return grupo;
+}
+
+export function subgruposDe(grupo: GrupoDefinicion): GrupoDefinicion[] {
+  return TODOS_LOS_GRUPOS.filter((candidato) => candidato.padreId === grupo.id);
+}
+
+/** The group followed by every group below it, each parent before its children. */
+export function conDescendientes(grupo: GrupoDefinicion): GrupoDefinicion[] {
+  return [grupo, ...subgruposDe(grupo).flatMap(conDescendientes)];
+}
+
+/** The Acciones first seeded directly under the group. */
+export function accionesPorDefectoDe(grupo: GrupoDefinicion): AccionDefinicion[] {
+  return ACCIONES.filter((accion) => accion.grupoPorDefecto === grupo.id);
+}

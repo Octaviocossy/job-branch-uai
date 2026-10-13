@@ -62,7 +62,15 @@ export class RegisterUseCase {
           });
 
     // The role's factory hands the new Persona its default roots; its tree is loaded from the database from now on.
-    await this.factories[persona.tipo].otorgarRaices(persona.id);
+    // This is not atomic with the Persona's creation, by design: when it fails the Persona holds no roots, which
+    // denies everything, until the next boot's `SincronizarMatrizUseCase` hands it its role's default roots
+    // (derived decision 32, invariant 12). No token is signed meanwhile, so nothing runs on the empty tree.
+    try {
+      await this.factories[persona.tipo].otorgarRaices(persona.id);
+    } catch (error) {
+      this.logger.error(`Default roots not handed out, the Persona holds none until the next matrix sync personaId=${persona.id}`);
+      throw error;
+    }
 
     const token = this.jwtService.sign({ sub: usuario.id, role: persona.tipo });
 

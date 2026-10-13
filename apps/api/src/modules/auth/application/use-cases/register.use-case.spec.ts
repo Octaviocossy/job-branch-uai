@@ -130,10 +130,12 @@ describe("RegisterUseCase", () => {
     const createPersonaUseCase = makeCreatePersonaUseCase({ id: "p1", usuarioId: "u1", puestoCorporativo: null, tipo: "postulante", habilidadesMaster: [] });
     const factories = makeFactories();
     vi.mocked(factories.postulante.otorgarRaices).mockRejectedValue(new Error("db down"));
-    const useCase = new RegisterUseCase(lista, passwordService, jwtService, makeLogger(), { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, factories);
+    const logger = makeLogger();
+    const useCase = new RegisterUseCase(lista, passwordService, jwtService, logger, { emit: vi.fn() } as unknown as EventEmitter2, createPersonaUseCase, factories);
 
     await expect(useCase.execute({ email: "a@b.com", password: "supersecret", nombreCompleto: "A", role: "postulante" })).rejects.toThrow("db down");
     expect(jwtService.sign).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("personaId=p1"));
   });
 
   it("creates a recruiter persona defaulted from the registered nombreCompleto and signs its tipo as role", async () => {

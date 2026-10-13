@@ -12,7 +12,11 @@ describe("permissionMatrixSchema", () => {
     expect(permissionMatrixSchema.safeParse({ ...valid, acciones: [] }).success).toBe(true);
   });
 
-  it("rejects a role outside postulante/recruiter", () => {
+  it("accepts administrador as a role", () => {
+    expect(permissionMatrixSchema.safeParse({ ...valid, role: "administrador" }).success).toBe(true);
+  });
+
+  it("rejects a role outside postulante/recruiter/administrador", () => {
     const result = permissionMatrixSchema.safeParse({ ...valid, role: "admin" });
 
     expect(result.success).toBe(false);

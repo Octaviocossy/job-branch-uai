@@ -1,47 +1,31 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import type { PersonaTipo } from "@repo/models";
-import { ResolverPermisosUseCase } from "../../modules/security/application/use-cases/resolver-permisos.use-case";
-import type { ContextoSeguridad } from "../../modules/security/domain/contexto-seguridad";
-import type { AuthenticatedRequest } from "../../shared/auth/jwt-auth.guard";
+import { ContextosSeguridadService } from "../../modules/security/application/contextos-seguridad.service";
 import { REQUIERE_ACCION_KEY } from "../decorators/requiere-accion.decorator";
+import type { AuthorizedRequest } from "../types/authorized-request";
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  private readonly cache = new Map<PersonaTipo, ContextoSeguridad>();
-
   constructor(
     private readonly reflector: Reflector,
-    private readonly resolverPermisosUseCase: ResolverPermisosUseCase,
+    private readonly contextos: ContextosSeguridadService,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const codigoAccion = this.reflector.getAllAndOverride<string | undefined>(REQUIERE_ACCION_KEY, [context.getHandler(), context.getClass()]);
 
     if (!codigoAccion) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const contexto = this.resolverContexto(request.user.role as PersonaTipo);
+    const request = context.switchToHttp().getRequest<AuthorizedRequest>();
 
-    if (!contexto.tienePermiso(codigoAccion)) {
+    request.contextoSeguridad ??= await this.contextos.obtener(request.user);
+
+    if (!request.contextoSeguridad.tienePermiso(codigoAccion)) {
       throw new ForbiddenException(`Missing permission: ${codigoAccion}`);
     }
 
     return true;
-  }
-
-  private resolverContexto(role: PersonaTipo): ContextoSeguridad {
-    const cached = this.cache.get(role);
-
-    if (cached) {
-      return cached;
-    }
-
-    const contexto = this.resolverPermisosUseCase.execute(role);
-    this.cache.set(role, contexto);
-
-    return contexto;
   }
 }

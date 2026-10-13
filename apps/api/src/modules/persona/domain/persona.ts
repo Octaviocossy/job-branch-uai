@@ -1,3 +1,5 @@
+import type { PersonaTipo } from "@repo/models";
+
 export abstract class Persona {
   constructor(
     public readonly id: string,
@@ -5,7 +7,7 @@ export abstract class Persona {
     public readonly puestoCorporativo: string | null,
   ) {}
 
-  abstract get tipo(): "recruiter" | "postulante";
+  abstract get tipo(): PersonaTipo;
 }
 
 export class Recruiter extends Persona {
@@ -37,5 +39,12 @@ export class Postulante extends Persona {
 
   get tipo(): "postulante" {
     return "postulante";
+  }
+}
+
+/** SPEC 18.10 third Persona subtype; only the seed creates one (invariant 2). */
+export class Administrador extends Persona {
+  get tipo(): "administrador" {
+    return "administrador";
   }
 }

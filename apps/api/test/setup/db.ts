@@ -18,6 +18,8 @@ export function makeTestDb() {
   return { pool, db };
 }
 
+// "componentes", "formularios" and "modulos" are never truncated here: that catalog is seed data, synced at
+// boot by SincronizarMatrizUseCase. "persona_componentes" empties through the usuarios -> personas cascade.
 export async function truncateAll(db: TestDatabase) {
   // "usuarios" and "empresas" sit at the root of every FK chain (applications/cv_versions/personas
   // off usuarios; vacantes off empresas) — CASCADE clears every dependent table transitively.

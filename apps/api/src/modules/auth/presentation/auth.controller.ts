@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Post, Req, UseGuards } from "@nestjs/common";
 import { type AuthResponse, type LoginInput, loginSchema, type MeResponse, type RegisterInput, registerSchema } from "@repo/models";
 import { ContextoActual } from "../../../common/decorators/contexto-actual.decorator";
 import { RequiereAccion } from "../../../common/decorators/requiere-accion.decorator";
@@ -6,9 +6,10 @@ import { PermissionsGuard } from "../../../common/guards/permissions.guard";
 import { ZodValidationPipe } from "../../../common/pipes/zod-validation.pipe";
 import { CurrentUser } from "../../../shared/auth/current-user.decorator";
 import type { JwtPayload } from "../../../shared/auth/jwt.service";
-import { JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
+import { type AuthenticatedRequest, JwtAuthGuard } from "../../../shared/auth/jwt-auth.guard";
 import type { ContextoSeguridad } from "../../security/domain/contexto-seguridad";
 import { GetUserUseCase } from "../../users/application/use-cases/get-user.use-case";
+import { CerrarSesionUseCase } from "../application/use-cases/cerrar-sesion.use-case";
 import { LoginUseCase } from "../application/use-cases/login.use-case";
 import { RegisterUseCase } from "../application/use-cases/register.use-case";
 
@@ -18,6 +19,7 @@ export class AuthController {
     private readonly registerUseCase: RegisterUseCase,
     private readonly loginUseCase: LoginUseCase,
     private readonly getUserUseCase: GetUserUseCase,
+    private readonly cerrarSesionUseCase: CerrarSesionUseCase,
   ) {}
 
   @Post("register")
@@ -42,5 +44,14 @@ export class AuthController {
     }
 
     return { user, permisos: contexto.listarAcciones() };
+  }
+
+  @Post("logout")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequiereAccion("auth.logout")
+  async logout(@Req() request: AuthenticatedRequest): Promise<void> {
+    // JwtAuthGuard always sets `sesionId` before a handler behind it runs.
+    await this.cerrarSesionUseCase.execute(request.sesionId as string);
   }
 }

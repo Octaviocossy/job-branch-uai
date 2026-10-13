@@ -36,6 +36,13 @@
       "when": 1791887818991,
       "tag": "0004_permission_matrix",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791898899964,
+      "tag": "0005_sesiones",
+      "breakpoints": true
     }
   ]
 }

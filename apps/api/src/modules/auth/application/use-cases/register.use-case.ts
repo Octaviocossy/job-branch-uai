@@ -1,26 +1,24 @@
 import { ConflictException, Inject, Injectable } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import type { AuthResponse, RegisterInput } from "@repo/models";
-import { JwtService } from "../../../../shared/auth/jwt.service";
 import { AppLogger } from "../../../../shared/logger/app.logger";
 import { CreatePersonaUseCase } from "../../../persona/application/use-cases/create-persona.use-case";
-import { ContextosSeguridadService } from "../../../security/application/contextos-seguridad.service";
 import { MATRIZ_PERMISOS_FACTORIES, type MatrizPermisosFactories } from "../../../security/application/factories/matriz-permisos.factory";
 import { USER_CREATED_EVENT } from "../../../users/domain/events/user-created.event";
 import { LISTA_USUARIOS, type ListaUsuarios } from "../../../users/domain/lista-usuarios.repository";
 import { PasswordService } from "../password.service";
+import { IniciarSesionUseCase } from "./iniciar-sesion.use-case";
 
 @Injectable()
 export class RegisterUseCase {
   constructor(
     @Inject(LISTA_USUARIOS) private readonly listaUsuarios: ListaUsuarios,
     private readonly passwordService: PasswordService,
-    private readonly jwtService: JwtService,
     private readonly logger: AppLogger,
     private readonly eventEmitter: EventEmitter2,
     private readonly createPersonaUseCase: CreatePersonaUseCase,
     @Inject(MATRIZ_PERMISOS_FACTORIES) private readonly factories: MatrizPermisosFactories,
-    private readonly contextos: ContextosSeguridadService,
+    private readonly iniciarSesionUseCase: IniciarSesionUseCase,
   ) {
     this.logger.setContext(RegisterUseCase.name);
   }
@@ -72,8 +70,8 @@ export class RegisterUseCase {
             raices,
           );
 
-    const token = this.jwtService.sign({ sub: usuario.id, role: persona.tipo });
-    await this.contextos.iniciar(token);
+    // The Persona and its roots exist by now, so the Sesion's ContextoSeguridad is resolved from them (invariant 13).
+    const token = await this.iniciarSesionUseCase.execute(usuario.id, persona.tipo);
 
     this.logger.log(`User registered id=${usuario.id}`);
 

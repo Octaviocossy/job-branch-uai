@@ -11,3 +11,4 @@ export * from "./schemas/persona.schema";
 export * from "./schemas/recordatorio.schema";
 export * from "./schemas/usuario.schema";
 export * from "./schemas/vacante.schema";
+export * from "./schemas/chat.schema";

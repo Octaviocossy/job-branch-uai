@@ -1,0 +1,2 @@
+ALTER TABLE "applications" ADD COLUMN "recruiter_usuario_id" uuid;--> statement-breakpoint
+ALTER TABLE "applications" ADD CONSTRAINT "applications_recruiter_usuario_id_usuarios_id_fk" FOREIGN KEY ("recruiter_usuario_id") REFERENCES "public"."usuarios"("id") ON DELETE no action ON UPDATE no action;

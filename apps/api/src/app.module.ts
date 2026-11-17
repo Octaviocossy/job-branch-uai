@@ -6,6 +6,7 @@ import { DatabaseModule } from "./database/database.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { BranchesModule } from "./modules/branches/branches.module";
+import { ChatModule } from "./modules/chat/chat.module";
 import { CvVersionsModule } from "./modules/cv-versions/cv-versions.module";
 import { FollowupModule } from "./modules/followup/followup.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -27,6 +28,7 @@ import { LoggerModule } from "./shared/logger/logger.module";
     AuthModule,
     CvVersionsModule,
     BranchesModule,
+    ChatModule,
     AnalyticsModule,
     FollowupModule,
   ],

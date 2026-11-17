@@ -12,3 +12,5 @@ export * from "./recordatorios.schema";
 export * from "./sesiones.schema";
 export * from "./usuarios.schema";
 export * from "./vacantes.schema";
+export * from "./conversaciones.schema";
+export * from "./mensajes.schema";

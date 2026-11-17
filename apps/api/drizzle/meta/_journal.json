@@ -43,6 +43,20 @@
       "when": 1791898899964,
       "tag": "0005_sesiones",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794952568369,
+      "tag": "0006_strong_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794955029293,
+      "tag": "0007_thin_vulcan",
+      "breakpoints": true
     }
   ]
 }
